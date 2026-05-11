@@ -89,7 +89,7 @@ class TaxonBoxplotTrajectoryPlotter(TaxonTrajectoryPlotter):
         top_pad = y_range * 0.22
 
         if self.config.plot.show_significance and sig_map is not None:
-            top_pad = y_range * 0.35
+            top_pad = y_range * 0.18
 
         y0 = max(0, y_min - bottom_pad)
         y1 = y_max + top_pad
