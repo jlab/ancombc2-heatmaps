@@ -17,6 +17,120 @@ from .trajectory_plotter import (
 
 
 class TaxonBoxplotTrajectoryPlotter(TaxonTrajectoryPlotter):
+    @staticmethod
+    def _boxplot_whisker_bounds(values: pd.Series) -> tuple[float, float]:
+        """
+        Compute visible boxplot whiskers using the standard 1.5 * IQR rule.
+        This matches the whiskers shown by seaborn/matplotlib when showfliers=False.
+        """
+        values = pd.to_numeric(values, errors="coerce").dropna()
+
+        if values.empty:
+            return np.nan, np.nan
+
+        q1 = values.quantile(0.25)
+        q3 = values.quantile(0.75)
+        iqr = q3 - q1
+
+        lower_fence = q1 - 1.5 * iqr
+        upper_fence = q3 + 1.5 * iqr
+
+        visible = values[(values >= lower_fence) & (values <= upper_fence)]
+
+        if visible.empty:
+            return float(values.min()), float(values.max())
+
+        return float(visible.min()), float(visible.max())
+
+    def _compute_boxplot_ylim(
+        self,
+        df: pd.DataFrame,
+        comparison_levels: Sequence[str],
+        sig_map: Optional[dict] = None,
+    ) -> tuple[float, float]:
+        """
+        Compute y-limits from the visible whiskers and add extra top space
+        for significance markers.
+        """
+        lows = []
+        highs = []
+
+        for tp_plot in sorted(df["tp_plot"].dropna().unique()):
+            for group in comparison_levels:
+                vals = df.loc[
+                    (df["tp_plot"] == tp_plot) & (df["group"] == group),
+                    "abundance",
+                ]
+
+                if vals.empty:
+                    continue
+
+                low, high = self._boxplot_whisker_bounds(vals)
+
+                if not np.isnan(low):
+                    lows.append(low)
+                if not np.isnan(high):
+                    highs.append(high)
+
+        if lows and highs:
+            y_min = min(lows)
+            y_max = max(highs)
+        else:
+            y_min = float(df["abundance"].min())
+            y_max = float(df["abundance"].max())
+
+        if y_min == y_max:
+            pad = max(abs(y_max) * 0.1, 0.001)
+            return max(0, y_min - pad), y_max + pad
+
+        y_range = y_max - y_min
+
+        bottom_pad = y_range * 0.08
+        top_pad = y_range * 0.22
+
+        if self.config.plot.show_significance and sig_map is not None:
+            top_pad = y_range * 0.35
+
+        y0 = max(0, y_min - bottom_pad)
+        y1 = y_max + top_pad
+
+        return y0, y1
+
+    def _highest_whisker_at_timepoint(
+        self,
+        df: pd.DataFrame,
+        tp_plot,
+        comparison_levels: Sequence[str],
+    ) -> float:
+        """
+        Return the highest visible whisker among all groups at one timepoint.
+        """
+        highs = []
+
+        for group in comparison_levels:
+            vals = df.loc[
+                (df["tp_plot"] == tp_plot) & (df["group"] == group),
+                "abundance",
+            ]
+
+            if vals.empty:
+                continue
+
+            _, high = self._boxplot_whisker_bounds(vals)
+
+            if not np.isnan(high):
+                highs.append(high)
+
+        if highs:
+            return max(highs)
+
+        g = df[df["tp_plot"] == tp_plot]
+
+        if g.empty:
+            return np.nan
+
+        return float(g["abundance"].max())
+
     def plot_single_boxplot(
         self,
         df: pd.DataFrame,
@@ -144,15 +258,23 @@ class TaxonBoxplotTrajectoryPlotter(TaxonTrajectoryPlotter):
         ax.set_xticks(range(len(tp_vals)))
         ax.set_xticklabels(tp_labels, rotation=35, ha="right")
 
-        if self.config.plot.y_lim == "auto_fix" and ylim is not None:
+        if self.config.plot.y_lim == "auto_fix":
+            if ylim is None:
+                ylim = self._compute_boxplot_ylim(
+                    df=df,
+                    comparison_levels=comparison_levels,
+                    sig_map=sig_map,
+                )
             ax.set_ylim(ylim)
+
         elif isinstance(self.config.plot.y_lim, tuple):
             ax.set_ylim(self.config.plot.y_lim)
 
         if self.config.plot.show_significance and sig_map is not None:
             y0, y1 = ax.get_ylim()
             y_range = y1 - y0
-            offset = y_range * 0.015
+
+            marker_offset = y_range * 0.035
 
             for i, tp_plot in enumerate(tp_vals):
                 g = df[df["tp_plot"] == tp_plot]
@@ -160,7 +282,6 @@ class TaxonBoxplotTrajectoryPlotter(TaxonTrajectoryPlotter):
                 if g.empty:
                     continue
 
-                visible_upper = g["abundance"].quantile(0.75)
                 original_tps = sorted(
                     pd.to_numeric(g["tp"], errors="coerce").dropna().unique()
                 )
@@ -170,7 +291,17 @@ class TaxonBoxplotTrajectoryPlotter(TaxonTrajectoryPlotter):
                 else:
                     is_sig = any(sig_map.get(int(tp_num), False) for tp_num in original_tps)
 
-                y = min(visible_upper + offset, y1 - y_range * 0.03)
+                highest_whisker = self._highest_whisker_at_timepoint(
+                    df=df,
+                    tp_plot=tp_plot,
+                    comparison_levels=comparison_levels,
+                )
+
+                if np.isnan(highest_whisker):
+                    continue
+
+                y = highest_whisker + marker_offset
+                y = min(y, y1 - y_range * 0.04)
 
                 ax.text(
                     i,
@@ -178,7 +309,8 @@ class TaxonBoxplotTrajectoryPlotter(TaxonTrajectoryPlotter):
                     sig_to_label(is_sig),
                     ha="center",
                     va="bottom",
-                    fontsize=11,
+                    fontsize=12,
+                    fontweight="bold",
                     color="black",
                 )
 
@@ -234,7 +366,20 @@ class TaxonBoxplotTrajectoryPlotter(TaxonTrajectoryPlotter):
             variable_name=self.config.metadata.comparison_col,
         )
 
-        ylim = self.compute_global_ylim([df]) if self.config.plot.y_lim == "auto_fix" else None
+        ylim = None
+
+        if self.config.plot.y_lim == "auto_fix":
+            df_for_ylim = self.apply_baseline(df).copy()
+            df_for_ylim["tp_plot"] = pd.to_numeric(df_for_ylim["tp_plot"], errors="coerce")
+            df_for_ylim["abundance"] = pd.to_numeric(df_for_ylim["abundance"], errors="coerce")
+            df_for_ylim = df_for_ylim.dropna(subset=["tp_plot", "abundance", "group"])
+
+            if not df_for_ylim.empty:
+                ylim = self._compute_boxplot_ylim(
+                    df=df_for_ylim,
+                    comparison_levels=comparison_levels,
+                    sig_map=sig_map,
+                )
 
         self.plot_single_boxplot(
             df=df,
