@@ -6,7 +6,9 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+
 from matplotlib.ticker import FuncFormatter
+from matplotlib.lines import Line2D
 
 from .plotter import SubsetSpec
 from .trajectory_plotter import (
@@ -69,6 +71,7 @@ class TaxonBoxplotTrajectoryPlotter(TaxonTrajectoryPlotter):
 
                 if not np.isnan(low):
                     lows.append(low)
+
                 if not np.isnan(high):
                     highs.append(high)
 
@@ -147,8 +150,10 @@ class TaxonBoxplotTrajectoryPlotter(TaxonTrajectoryPlotter):
             return
 
         df = self.apply_baseline(df).copy()
+
         df["tp_plot"] = pd.to_numeric(df["tp_plot"], errors="coerce")
         df["abundance"] = pd.to_numeric(df["abundance"], errors="coerce")
+
         df = df.dropna(subset=["tp_plot", "abundance", "group"])
 
         if df.empty:
@@ -197,6 +202,9 @@ class TaxonBoxplotTrajectoryPlotter(TaxonTrajectoryPlotter):
         tp_vals = sorted(df["tp_plot"].dropna().unique())
         x_positions = {tp: i for i, tp in enumerate(tp_vals)}
 
+        # =========================================================
+        # TREND LINES
+        # =========================================================
         if show_trend:
             grouped = (
                 df.groupby(["tp_plot", "group"], as_index=False)["abundance"]
@@ -235,6 +243,7 @@ class TaxonBoxplotTrajectoryPlotter(TaxonTrajectoryPlotter):
                         alpha=0.9,
                         label=f"{group} trend",
                     )
+
                 except Exception:
                     ax.plot(
                         x,
@@ -245,10 +254,17 @@ class TaxonBoxplotTrajectoryPlotter(TaxonTrajectoryPlotter):
                         label=f"{group} trend",
                     )
 
-        ax.set_title(f"{title}\n(boxplots + sample points + approximate trend)", pad=15)
+        ax.set_title(
+            f"{title}\n(boxplots + sample points + approximate trend)",
+            pad=15,
+        )
+
         ax.set_ylabel(self.config.plot.y_label)
         ax.set_xlabel("")
-        ax.yaxis.set_major_formatter(FuncFormatter(clean_float_formatter))
+
+        ax.yaxis.set_major_formatter(
+            FuncFormatter(clean_float_formatter)
+        )
 
         tp_labels = [
             self.config.metadata.timepoint_label_map.get(tp, str(tp))
@@ -256,40 +272,64 @@ class TaxonBoxplotTrajectoryPlotter(TaxonTrajectoryPlotter):
         ]
 
         ax.set_xticks(range(len(tp_vals)))
-        ax.set_xticklabels(tp_labels, rotation=35, ha="right")
+        ax.set_xticklabels(
+            tp_labels,
+            rotation=35,
+            ha="right",
+        )
 
+        # =========================================================
+        # Y LIMITS
+        # =========================================================
         if self.config.plot.y_lim == "auto_fix":
+
             if ylim is None:
                 ylim = self._compute_boxplot_ylim(
                     df=df,
                     comparison_levels=comparison_levels,
                     sig_map=sig_map,
                 )
+
             ax.set_ylim(ylim)
 
         elif isinstance(self.config.plot.y_lim, tuple):
             ax.set_ylim(self.config.plot.y_lim)
 
+        # =========================================================
+        # SIGNIFICANCE LABELS
+        # =========================================================
         if self.config.plot.show_significance and sig_map is not None:
+
             y0, y1 = ax.get_ylim()
             y_range = y1 - y0
 
             marker_offset = y_range * 0.035
 
             for i, tp_plot in enumerate(tp_vals):
+
                 g = df[df["tp_plot"] == tp_plot]
 
                 if g.empty:
                     continue
 
                 original_tps = sorted(
-                    pd.to_numeric(g["tp"], errors="coerce").dropna().unique()
+                    pd.to_numeric(
+                        g["tp"],
+                        errors="coerce",
+                    ).dropna().unique()
                 )
 
                 if tp_plot == 0 and self.config.plot.merge_baselines:
-                    is_sig = any(sig_map.get(tp_num, False) for tp_num in [-7, -4, -1])
+                    is_sig = any(
+                        sig_map.get(tp_num, False)
+                        for tp_num in [-7, -4, -1]
+                    )
+
                 else:
-                    is_sig = any(sig_map.get(int(tp_num), False) for tp_num in original_tps)
+                    is_sig = any(
+                        sig_map.get(int(tp_num), False)
+                        for tp_num in original_tps
+                    )
 
                 highest_whisker = self._highest_whisker_at_timepoint(
                     df=df,
@@ -314,6 +354,9 @@ class TaxonBoxplotTrajectoryPlotter(TaxonTrajectoryPlotter):
                     color="black",
                 )
 
+        # =========================================================
+        # CLEAN LEGEND
+        # =========================================================
         handles, labels = ax.get_legend_handles_labels()
 
         clean_handles = []
@@ -321,10 +364,31 @@ class TaxonBoxplotTrajectoryPlotter(TaxonTrajectoryPlotter):
         seen = set()
 
         for h, l in zip(handles, labels):
+
+            # remove duplicate entries
+            # and trend line labels
             if l not in seen and not str(l).endswith("trend"):
+
                 clean_handles.append(h)
                 clean_labels.append(l)
                 seen.add(l)
+
+        # ---------------------------------------------------------
+        # add significance explanation
+        # ---------------------------------------------------------
+        if self.config.plot.show_significance:
+
+            star_legend = Line2D(
+                [0],
+                [0],
+                color="black",
+                lw=0,
+                marker="",
+                label="* ANCOM significant\nns : not significant",
+            )
+
+            clean_handles.append(star_legend)
+            clean_labels.append(star_legend.get_label())
 
         ax.legend(
             handles=clean_handles,
@@ -350,7 +414,9 @@ class TaxonBoxplotTrajectoryPlotter(TaxonTrajectoryPlotter):
 
         if comparison_levels is None:
             comparison_levels = sorted(
-                meta[self.config.metadata.comparison_col].dropna().unique()
+                meta[
+                    self.config.metadata.comparison_col
+                ].dropna().unique()
             )
 
         df = self.build_df(
@@ -369,12 +435,25 @@ class TaxonBoxplotTrajectoryPlotter(TaxonTrajectoryPlotter):
         ylim = None
 
         if self.config.plot.y_lim == "auto_fix":
+
             df_for_ylim = self.apply_baseline(df).copy()
-            df_for_ylim["tp_plot"] = pd.to_numeric(df_for_ylim["tp_plot"], errors="coerce")
-            df_for_ylim["abundance"] = pd.to_numeric(df_for_ylim["abundance"], errors="coerce")
-            df_for_ylim = df_for_ylim.dropna(subset=["tp_plot", "abundance", "group"])
+
+            df_for_ylim["tp_plot"] = pd.to_numeric(
+                df_for_ylim["tp_plot"],
+                errors="coerce",
+            )
+
+            df_for_ylim["abundance"] = pd.to_numeric(
+                df_for_ylim["abundance"],
+                errors="coerce",
+            )
+
+            df_for_ylim = df_for_ylim.dropna(
+                subset=["tp_plot", "abundance", "group"]
+            )
 
             if not df_for_ylim.empty:
+
                 ylim = self._compute_boxplot_ylim(
                     df=df_for_ylim,
                     comparison_levels=comparison_levels,
