@@ -29,7 +29,8 @@ pip install git+ssh://git@github.com/jlab/ancombc2-heatmaps.git
 
 
 
-Please be aware that you have to activate the correct conda environment with an Qiime2 Version that is not too old. I recommend "qiime2-amplicon-2026.1".
+Please be aware that you have to activate the correct conda environment with an Qiime2 Version that is not too old.
+I recommend "qiime2-amplicon-2026.1".
 
 To see your available environments use:
 
