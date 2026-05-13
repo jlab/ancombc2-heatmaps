@@ -22,9 +22,12 @@ blablabla
 
 The installation of the package can be done from GitHub via git in the console:
 
+[!FIXME] # maybe a change after making it public
 ```
-pip install git+ssh://git@github.com/jlab/ancombc2-heatmaps.git
+pip install git+ssh://git@github.com/jlab/ancombc2-heatmaps.git  
 ```
+
+
 
 Please be aware that you have to activate the correct conda environment with an Qiime2 Version that is not too old. I recommend "qiime2-amplicon-2026.1".
 
@@ -56,9 +59,30 @@ conda env create \
   -n qiime2-amplicon-2026.1 \
   -f ~/qiime2-amplicon-2026.1.yml
 ```
+.
+
+After installation you can check the version with
+
+```
+!qiime --version
+```
+
+and import it for example in your notebook with
+
+```
+import ancombc2_heatmaps as ah
+```
+.
+
+You also have to import numpy and Path from pathlib.
+
+```
+from pathlib import Path
+import pandas as pd
+```
 
 
-
+## Input Data
 
 
 
