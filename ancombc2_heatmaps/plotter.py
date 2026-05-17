@@ -74,7 +74,7 @@ class MetadataConfig:
 @dataclass
 class ComparisonConfig:
     variable_name: str
-    positive_class: str
+    positive_class: Optional[str] = None
     negative_class: Optional[str] = None
     effect_column: Optional[str] = None
     invert_sign: Optional[bool] = None
@@ -199,7 +199,13 @@ def is_empty_tax(x) -> bool:
     if x is None:
         return True
     stripped = re.sub(r"^[a-z]__+", "", str(x)).strip().lower()
-    return stripped in {"", "uncultured", "unclassified", "unknown", "ambiguous_taxa"}
+    return stripped in {
+        "",
+        "uncultured",
+        "unclassified",
+        "unknown",
+        "ambiguous_taxa",
+    }
 
 
 def default_normalize_taxon_label(raw_tax) -> str:
@@ -247,6 +253,7 @@ def default_taxon_formatter(label: str) -> str:
 def make_unique_labels(labels: Sequence[str]) -> List[str]:
     counts = {}
     out = []
+
     for lab in labels:
         if lab not in counts:
             counts[lab] = 1
@@ -254,13 +261,16 @@ def make_unique_labels(labels: Sequence[str]) -> List[str]:
         else:
             counts[lab] += 1
             out.append(f"{lab} ({counts[lab]})")
+
     return out
 
 
 def format_percent_value(x: float) -> str:
     if pd.isna(x):
         return ""
+
     pct = x * 100
+
     if pct == 0:
         return "0%"
     if pct >= 10:
@@ -269,6 +279,7 @@ def format_percent_value(x: float) -> str:
         return f"{pct:.2f}%"
     if pct >= 0.01:
         return f"{pct:.2f}%"
+
     return "<0.01%"
 
 
@@ -297,6 +308,7 @@ def compute_row_heights_from_relative_abundance(
 
     scaled = ((row_sig_ra_mean - ra_min) / (ra_max - ra_min)).clip(0, 1)
     row_heights = base_cell_h * (1 + height_scale * scaled.to_numpy())
+
     return row_heights
 
 
@@ -312,6 +324,7 @@ class ANCOMBC2HeatmapPlotter:
 
         if self.config.taxonomy.normalizer is None:
             self.config.taxonomy.normalizer = default_normalize_taxon_label
+
         if self.config.taxonomy.formatter is None:
             self.config.taxonomy.formatter = default_taxon_formatter
 
@@ -329,12 +342,14 @@ class ANCOMBC2HeatmapPlotter:
     # -----------------------------------------------------
     def load_metadata(self) -> pd.DataFrame:
         fp = self.config.paths.metadata_path
+
         if not os.path.exists(fp):
             raise FileNotFoundError(f"Metadata file not found:\n{fp}")
 
         meta = read_table_auto(fp)
         self._validate_metadata_columns(meta)
         meta = self._prepare_metadata(meta)
+
         return meta
 
     def _validate_metadata_columns(self, meta: pd.DataFrame) -> None:
@@ -342,10 +357,12 @@ class ANCOMBC2HeatmapPlotter:
             self.config.metadata.sample_col,
             self.config.metadata.timepoint_col,
         ]
+
         if self.config.metadata.comparison_col is not None:
             required.append(self.config.metadata.comparison_col)
 
         missing = [c for c in required if c not in meta.columns]
+
         if missing:
             raise ValueError(f"Missing metadata columns: {missing}")
 
@@ -369,20 +386,31 @@ class ANCOMBC2HeatmapPlotter:
 
         for col, allowed in self.config.metadata.allowed_values.items():
             if col not in meta.columns:
-                raise ValueError(f"allowed_values references unknown metadata column: {col}")
+                raise ValueError(
+                    f"allowed_values references unknown metadata column: {col}"
+                )
+
             meta = meta[meta[col].isin(allowed)].copy()
 
         if self.config.metadata.timepoints:
-            meta = meta[meta[time_col].isin(self.config.metadata.timepoints)].copy()
+            meta = meta[
+                meta[time_col].isin(self.config.metadata.timepoints)
+            ].copy()
 
         return meta
 
-    def filter_metadata(self, meta: pd.DataFrame, subset: SubsetSpec) -> pd.DataFrame:
+    def filter_metadata(
+        self,
+        meta: pd.DataFrame,
+        subset: SubsetSpec,
+    ) -> pd.DataFrame:
         out = meta.copy()
 
         for col, val in subset.filters.items():
             if col not in out.columns:
-                raise ValueError(f"Subset filter references unknown metadata column: {col}")
+                raise ValueError(
+                    f"Subset filter references unknown metadata column: {col}"
+                )
 
             if isinstance(val, (list, tuple, set)):
                 out = out[out[col].isin(list(val))].copy()
@@ -394,18 +422,28 @@ class ANCOMBC2HeatmapPlotter:
     # -----------------------------------------------------
     # Paths
     # -----------------------------------------------------
-    def get_table_qza_path(self, timepoint: str, subset: SubsetSpec) -> str:
+    def get_table_qza_path(
+        self,
+        timepoint: str,
+        subset: SubsetSpec,
+    ) -> str:
         rel = self.config.paths.table_template.format(
             timepoint=timepoint,
             subset_label=subset.label,
         )
+
         return os.path.join(self.config.paths.base_table_dir, rel)
 
-    def get_ancom_export_dir(self, timepoint: str, subset: SubsetSpec) -> str:
+    def get_ancom_export_dir(
+        self,
+        timepoint: str,
+        subset: SubsetSpec,
+    ) -> str:
         rel = self.config.paths.ancom_template.format(
             timepoint=timepoint,
             subset_label=subset.label,
         )
+
         return os.path.join(self.config.paths.base_ancom_dir, rel)
 
     # -----------------------------------------------------
@@ -420,6 +458,7 @@ class ANCOMBC2HeatmapPlotter:
                     f"Configured effect_column '{cfg.effect_column}' not found. "
                     f"Available columns: {list(df.columns)}"
                 )
+
             return cfg.effect_column
 
         prefix = f"{cfg.variable_name}::"
@@ -427,9 +466,11 @@ class ANCOMBC2HeatmapPlotter:
 
         if len(candidates) == 1:
             return candidates[0]
+
         if len(candidates) > 1:
             raise ValueError(
-                f"Multiple candidate effect columns found for prefix '{prefix}': {candidates}. "
+                f"Multiple candidate effect columns found for prefix "
+                f"'{prefix}': {candidates}. "
                 f"Please specify comparison.effect_column explicitly."
             )
 
@@ -438,33 +479,50 @@ class ANCOMBC2HeatmapPlotter:
             f"Available columns: {list(df.columns)}"
         )
 
-    def infer_negative_class_from_effect_column(self, effect_col: str) -> str:
-        cfg = self.config.comparison
-
-        if cfg.negative_class is not None:
-            return cfg.negative_class
-
+    def infer_positive_class_from_effect_column(self, effect_col: str) -> str:
         if "::" in effect_col:
-            level = effect_col.split("::", 1)[1]
-            if level != cfg.positive_class:
-                return level
+            return effect_col.split("::", 1)[1]
+
+        return effect_col
+
+    def infer_negative_class_from_metadata(self, positive_class: str) -> str:
+        cfg_meta = self.config.metadata
+        comparison_col = cfg_meta.comparison_col
+
+        if comparison_col is None:
+            return "reference"
+
+        allowed = cfg_meta.allowed_values.get(comparison_col)
+
+        if allowed is not None:
+            others = [x for x in allowed if x != positive_class]
+
+            if len(others) == 1:
+                return others[0]
 
         return "reference"
 
     def determine_sign_inversion(self, effect_col: str) -> bool:
-        cfg = self.config.comparison
+        """
+        Default behavior:
+        Do not change the ANCOM-BC2 LFC direction.
 
-        if cfg.invert_sign is not None:
-            return cfg.invert_sign
-
-        if "::" in effect_col:
-            level = effect_col.split("::", 1)[1]
-            return level != cfg.positive_class
+        The direction is taken directly from the exported effect column.
+        Only use invert_sign=True/False manually if you explicitly want to
+        override this behavior.
+        """
+        if self.config.comparison.invert_sign is not None:
+            return self.config.comparison.invert_sign
 
         return False
 
-    def convert_lfc_to_positive_class(self, raw_lfc: float, effect_col: str) -> float:
+    def convert_lfc_to_positive_class(
+        self,
+        raw_lfc: float,
+        effect_col: str,
+    ) -> float:
         invert = self.determine_sign_inversion(effect_col)
+
         return -raw_lfc if invert else raw_lfc
 
     # -----------------------------------------------------
@@ -476,7 +534,6 @@ class ANCOMBC2HeatmapPlotter:
         subset: SubsetSpec,
     ) -> Tuple[pd.DataFrame, Dict[str, Dict[str, int]]]:
         cfg_meta = self.config.metadata
-        comparison_cfg = self.config.comparison
 
         sample_col = cfg_meta.sample_col
         time_col = cfg_meta.timepoint_col
@@ -489,12 +546,17 @@ class ANCOMBC2HeatmapPlotter:
 
         for tp in cfg_meta.timepoints:
             qza_fp = self.get_table_qza_path(tp, subset)
+
             if not os.path.exists(qza_fp):
                 continue
 
             tab = load_qza_table_as_df(qza_fp)
 
-            tab.index = [self.config.taxonomy.normalizer(x) for x in tab.index]
+            tab.index = [
+                self.config.taxonomy.normalizer(x)
+                for x in tab.index
+            ]
+
             tab = tab.groupby(tab.index).sum()
 
             col_sums = tab.sum(axis=0)
@@ -502,7 +564,10 @@ class ANCOMBC2HeatmapPlotter:
             rel_tab = tab.div(col_sums, axis=1)
 
             tp_meta = meta[meta[time_col] == tp].copy()
-            tp_samples = [s for s in tp_meta[sample_col] if s in rel_tab.columns]
+            tp_samples = [
+                s for s in tp_meta[sample_col]
+                if s in rel_tab.columns
+            ]
 
             if len(tp_samples) == 0:
                 continue
@@ -510,21 +575,23 @@ class ANCOMBC2HeatmapPlotter:
             mean_vals = rel_tab[tp_samples].mean(axis=1, skipna=True)
             mean_dict[tp] = mean_vals
 
-            tp_meta_used = tp_meta[tp_meta[sample_col].isin(tp_samples)].copy()
+            tp_meta_used = tp_meta[
+                tp_meta[sample_col].isin(tp_samples)
+            ].copy()
 
-            if comparison_col is not None and comparison_col in tp_meta_used.columns:
-                pos_n = int((tp_meta_used[comparison_col] == comparison_cfg.positive_class).sum())
+            if (
+                comparison_col is not None
+                and comparison_col in tp_meta_used.columns
+            ):
+                counts = (
+                    tp_meta_used[comparison_col]
+                    .value_counts(dropna=False)
+                    .astype(int)
+                    .to_dict()
+                )
 
-                neg_label = self.config.comparison.negative_class or "other"
-                if neg_label == "reference":
-                    neg_n = int((tp_meta_used[comparison_col] != comparison_cfg.positive_class).sum())
-                else:
-                    neg_n = int((tp_meta_used[comparison_col] == neg_label).sum())
+                group_counts[tp] = counts
 
-                group_counts[tp] = {
-                    comparison_cfg.positive_class: pos_n,
-                    neg_label: neg_n,
-                }
             else:
                 group_counts[tp] = {}
 
@@ -540,14 +607,28 @@ class ANCOMBC2HeatmapPlotter:
 
         for tp in self.config.metadata.timepoints:
             export_dir = self.get_ancom_export_dir(tp, subset)
+
             if not os.path.isdir(export_dir):
                 continue
 
-            lfc_fp = os.path.join(export_dir, self.config.paths.lfc_filename)
-            q_fp = os.path.join(export_dir, self.config.paths.q_filename)
-            diff_fp = os.path.join(export_dir, self.config.paths.diff_filename)
+            lfc_fp = os.path.join(
+                export_dir,
+                self.config.paths.lfc_filename,
+            )
+            q_fp = os.path.join(
+                export_dir,
+                self.config.paths.q_filename,
+            )
+            diff_fp = os.path.join(
+                export_dir,
+                self.config.paths.diff_filename,
+            )
 
-            if not (os.path.exists(lfc_fp) and os.path.exists(q_fp) and os.path.exists(diff_fp)):
+            if not (
+                os.path.exists(lfc_fp)
+                and os.path.exists(q_fp)
+                and os.path.exists(diff_fp)
+            ):
                 continue
 
             lfc = pd.read_json(lfc_fp, lines=True)
@@ -556,24 +637,38 @@ class ANCOMBC2HeatmapPlotter:
 
             tax_col_lfc = "taxon" if "taxon" in lfc.columns else lfc.columns[0]
             tax_col_q = "taxon" if "taxon" in q.columns else q.columns[0]
-            tax_col_diff = "taxon" if "taxon" in diff.columns else diff.columns[0]
+            tax_col_diff = (
+                "taxon" if "taxon" in diff.columns else diff.columns[0]
+            )
 
             effect_col = self.detect_effect_column(lfc)
             detected_effect_col = effect_col
 
             if effect_col not in q.columns or effect_col not in diff.columns:
                 raise ValueError(
-                    f"Effect column '{effect_col}' not found in q or diff for {export_dir}."
+                    f"Effect column '{effect_col}' not found in q or diff "
+                    f"for {export_dir}."
                 )
 
             lfc_sub = lfc[[tax_col_lfc, effect_col]].rename(
-                columns={tax_col_lfc: "taxon_raw", effect_col: "lfc_raw"}
+                columns={
+                    tax_col_lfc: "taxon_raw",
+                    effect_col: "lfc_raw",
+                }
             )
+
             q_sub = q[[tax_col_q, effect_col]].rename(
-                columns={tax_col_q: "taxon_raw", effect_col: "q"}
+                columns={
+                    tax_col_q: "taxon_raw",
+                    effect_col: "q",
+                }
             )
+
             diff_sub = diff[[tax_col_diff, effect_col]].rename(
-                columns={tax_col_diff: "taxon_raw", effect_col: "diff"}
+                columns={
+                    tax_col_diff: "taxon_raw",
+                    effect_col: "diff",
+                }
             )
 
             tmp = (
@@ -583,11 +678,21 @@ class ANCOMBC2HeatmapPlotter:
                 .copy()
             )
 
-            tmp["taxon"] = tmp["taxon_raw"].apply(self.config.taxonomy.normalizer)
-            tmp["lfc"] = tmp["lfc_raw"].apply(
-                lambda x: self.convert_lfc_to_positive_class(x, effect_col)
+            tmp["taxon"] = tmp["taxon_raw"].apply(
+                self.config.taxonomy.normalizer
             )
-            tmp["significant"] = (tmp["q"] < self.config.q_cutoff) & (tmp["diff"] == True)
+
+            tmp["lfc"] = tmp["lfc_raw"].apply(
+                lambda x: self.convert_lfc_to_positive_class(
+                    x,
+                    effect_col,
+                )
+            )
+
+            tmp["significant"] = (
+                (tmp["q"] < self.config.q_cutoff)
+                & (tmp["diff"] == True)
+            )
 
             tmp_lfc = tmp.groupby("taxon", as_index=True)["lfc"].mean()
             tmp_sig = tmp.groupby("taxon", as_index=True)["significant"].any()
@@ -603,24 +708,38 @@ class ANCOMBC2HeatmapPlotter:
     # -----------------------------------------------------
     # Plot helpers
     # -----------------------------------------------------
-    def _get_positive_negative_labels(self, effect_col: Optional[str]) -> Tuple[str, str]:
-        pos = self.config.comparison.positive_class
-        neg = self.config.comparison.negative_class
+    def _get_positive_negative_labels(
+        self,
+        effect_col: Optional[str],
+    ) -> Tuple[str, str]:
+        cfg = self.config.comparison
 
-        if neg is None:
-            if effect_col is not None:
-                neg = self.infer_negative_class_from_effect_column(effect_col)
-            else:
-                neg = "reference"
+        if cfg.positive_class is not None:
+            pos = cfg.positive_class
+
+        elif effect_col is not None:
+            pos = self.infer_positive_class_from_effect_column(effect_col)
+
+        else:
+            pos = cfg.variable_name
+
+        if cfg.negative_class is not None:
+            neg = cfg.negative_class
+
+        else:
+            neg = self.infer_negative_class_from_metadata(pos)
 
         return pos, neg
 
     def _get_cell_text_description(self) -> str:
         mode = self.config.cell_text_mode
+
         if mode == "relative_abundance":
             return "mean relative abundance"
+
         if mode == "lfc":
             return "log fold change"
+
         return "no annotation"
 
     def _get_cell_text_value(
@@ -633,10 +752,15 @@ class ANCOMBC2HeatmapPlotter:
         mode = self.config.cell_text_mode
 
         if mode == "relative_abundance":
-            return format_percent_value(mean_rel_df.loc[row_name, col_name])
+            return format_percent_value(
+                mean_rel_df.loc[row_name, col_name]
+            )
 
         if mode == "lfc":
-            return format_lfc_value(plot_df.loc[row_name, col_name], self.config.lfc_decimals)
+            return format_lfc_value(
+                plot_df.loc[row_name, col_name],
+                self.config.lfc_decimals,
+            )
 
         if mode == "none":
             return ""
@@ -654,19 +778,30 @@ class ANCOMBC2HeatmapPlotter:
         save_pdf: bool = True,
         show: bool = True,
     ) -> None:
-        mean_rel_df, group_counts = self.build_mean_relative_abundance(meta_df, subset)
+        mean_rel_df, group_counts = self.build_mean_relative_abundance(
+            meta_df,
+            subset,
+        )
+
         if mean_rel_df.empty:
             print(f"[{subset.label}] No mean relative abundance data available.")
             return
 
         lfc_df, sig_df, effect_col = self.read_ancom_for_subset(subset)
+
         if lfc_df.empty:
             print(f"[{subset.label}] No LFC data found.")
             return
 
-        positive_label, negative_label = self._get_positive_negative_labels(effect_col)
+        positive_label, negative_label = self._get_positive_negative_labels(
+            effect_col
+        )
 
-        present_tps = [tp for tp in self.config.metadata.timepoints if tp in lfc_df.columns]
+        present_tps = [
+            tp for tp in self.config.metadata.timepoints
+            if tp in lfc_df.columns
+        ]
+
         lfc_df = lfc_df[present_tps]
         sig_df = sig_df[present_tps]
 
@@ -679,10 +814,16 @@ class ANCOMBC2HeatmapPlotter:
         sig_df = sig_df.loc[keep_taxa].copy()
 
         if lfc_df.empty:
-            print(f"[{subset.label}] No taxa remaining after significance filter.")
+            print(
+                f"[{subset.label}] No taxa remaining after significance filter."
+            )
             return
 
-        common_taxa = lfc_df.index.intersection(sig_df.index).intersection(mean_rel_df.index)
+        common_taxa = (
+            lfc_df.index
+            .intersection(sig_df.index)
+            .intersection(mean_rel_df.index)
+        )
 
         lfc_df = lfc_df.loc[common_taxa].copy()
         sig_df = sig_df.loc[common_taxa].copy()
@@ -701,10 +842,15 @@ class ANCOMBC2HeatmapPlotter:
             print(f"[{subset.label}] No plottable values remain.")
             return
 
-        row_order = pd.DataFrame({
-            "n_sig": sig_df.sum(axis=1),
-            "mean_abs_lfc": lfc_df.abs().mean(axis=1),
-        }).sort_values(["n_sig", "mean_abs_lfc"], ascending=[False, False]).index
+        row_order = pd.DataFrame(
+            {
+                "n_sig": sig_df.sum(axis=1),
+                "mean_abs_lfc": lfc_df.abs().mean(axis=1),
+            }
+        ).sort_values(
+            ["n_sig", "mean_abs_lfc"],
+            ascending=[False, False],
+        ).index
 
         plot_df = plot_df.loc[row_order]
         mean_rel_df = mean_rel_df.loc[row_order]
@@ -712,8 +858,10 @@ class ANCOMBC2HeatmapPlotter:
         lfc_df = lfc_df.loc[row_order]
 
         display_labels = [
-            self.config.taxonomy.formatter(x) for x in plot_df.index
+            self.config.taxonomy.formatter(x)
+            for x in plot_df.index
         ]
+
         display_labels = make_unique_labels(display_labels)
 
         sig_ra_df = mean_rel_df.where(sig_df)
@@ -731,11 +879,13 @@ class ANCOMBC2HeatmapPlotter:
         cmap.set_bad(self.config.style.missing_color)
 
         vals = plot_df.to_numpy(dtype=float)
+
         if vals.size == 0 or np.isnan(vals).all():
             print(f"[{subset.label}] No valid numeric values to plot.")
             return
 
         max_abs = np.nanmax(np.abs(vals))
+
         if not np.isfinite(max_abs) or max_abs == 0:
             max_abs = 1
 
@@ -753,8 +903,15 @@ class ANCOMBC2HeatmapPlotter:
         fig_h = total_height + 2.2
         fig_w = n_cols * self.config.style.base_cell_width + 7.5
 
-        fig_h = min(max(fig_h, self.config.style.figure_min_height), self.config.style.figure_max_height)
-        fig_w = min(max(fig_w, self.config.style.figure_min_width), self.config.style.figure_max_width)
+        fig_h = min(
+            max(fig_h, self.config.style.figure_min_height),
+            self.config.style.figure_max_height,
+        )
+
+        fig_w = min(
+            max(fig_w, self.config.style.figure_min_width),
+            self.config.style.figure_max_width,
+        )
 
         fig, ax = plt.subplots(figsize=(fig_w, fig_h))
 
@@ -773,6 +930,7 @@ class ANCOMBC2HeatmapPlotter:
         ax.set_ylim(y_edges[-1], 0)
 
         cbar_ax = fig.add_axes([0.96, 0.6, 0.015, 0.18])
+
         cbar_label = self.config.text.colorbar_template.format(
             positive_label=positive_label,
             negative_label=negative_label,
@@ -780,7 +938,9 @@ class ANCOMBC2HeatmapPlotter:
 
         cbar = fig.colorbar(mesh, cax=cbar_ax, label=cbar_label)
         cbar.ax.tick_params(labelsize=self.config.style.cbar_tick_fontsize)
-        cbar.ax.yaxis.label.set_size(self.config.style.cbar_label_fontsize)
+        cbar.ax.yaxis.label.set_size(
+            self.config.style.cbar_label_fontsize
+        )
 
         if self.config.cell_text_mode != "none":
             white_text_threshold = 0.72 * max_abs
@@ -788,6 +948,7 @@ class ANCOMBC2HeatmapPlotter:
             for i, r in enumerate(plot_df.index):
                 for j, c in enumerate(plot_df.columns):
                     val = plot_df.loc[r, c]
+
                     if pd.notna(val):
                         txt = self._get_cell_text_value(
                             row_name=r,
@@ -795,7 +956,13 @@ class ANCOMBC2HeatmapPlotter:
                             mean_rel_df=mean_rel_df,
                             plot_df=plot_df,
                         )
-                        text_color = "white" if abs(val) >= white_text_threshold else "black"
+
+                        text_color = (
+                            "white"
+                            if abs(val) >= white_text_threshold
+                            else "black"
+                        )
+
                         ax.text(
                             x_centers[j],
                             y_centers[i],
@@ -808,7 +975,13 @@ class ANCOMBC2HeatmapPlotter:
 
         if self.config.split_after_timepoint is not None:
             if self.config.split_after_timepoint in plot_df.columns:
-                split_pos = plot_df.columns.get_loc(self.config.split_after_timepoint) + 1
+                split_pos = (
+                    plot_df.columns.get_loc(
+                        self.config.split_after_timepoint
+                    )
+                    + 1
+                )
+
                 ax.axvline(
                     split_pos,
                     color=self.config.style.split_line_color,
@@ -823,11 +996,24 @@ class ANCOMBC2HeatmapPlotter:
             cell_text_description=self._get_cell_text_description(),
         )
 
-        ax.set_title(title, fontsize=self.config.style.title_fontsize, pad=12)
-        ax.set_xlabel(self.config.text.x_label, fontsize=self.config.style.axis_label_fontsize)
-        ax.set_ylabel(self.config.text.y_label, fontsize=self.config.style.axis_label_fontsize)
+        ax.set_title(
+            title,
+            fontsize=self.config.style.title_fontsize,
+            pad=12,
+        )
+
+        ax.set_xlabel(
+            self.config.text.x_label,
+            fontsize=self.config.style.axis_label_fontsize,
+        )
+
+        ax.set_ylabel(
+            self.config.text.y_label,
+            fontsize=self.config.style.axis_label_fontsize,
+        )
 
         ax.set_xticks(x_centers)
+
         ax.set_xticklabels(
             plot_df.columns,
             rotation=45,
@@ -839,10 +1025,21 @@ class ANCOMBC2HeatmapPlotter:
         top_ax.set_xticks(x_centers)
 
         top_labels = []
+
         for tp in plot_df.columns:
             counts = group_counts.get(tp, {})
+
             pos_n = counts.get(positive_label, "?")
-            neg_n = counts.get(negative_label, "?")
+
+            if negative_label == "reference":
+                neg_n = sum(
+                    int(v)
+                    for k, v in counts.items()
+                    if k != positive_label
+                )
+            else:
+                neg_n = counts.get(negative_label, "?")
+
             top_labels.append(
                 self.config.text.top_axis_count_template.format(
                     positive_label=positive_label,
@@ -858,13 +1055,22 @@ class ANCOMBC2HeatmapPlotter:
             ha="left",
             fontsize=self.config.style.top_tick_fontsize,
         )
+
         top_ax.tick_params(axis="x", pad=6)
 
         ax.set_yticks(y_centers)
-        ax.set_yticklabels(display_labels, rotation=0, fontsize=self.config.style.ytick_fontsize)
+
+        ax.set_yticklabels(
+            display_labels,
+            rotation=0,
+            fontsize=self.config.style.ytick_fontsize,
+        )
 
         for tick_label in ax.get_yticklabels():
-            if is_highlight_taxon(tick_label.get_text(), self.config.style.highlight_taxa):
+            if is_highlight_taxon(
+                tick_label.get_text(),
+                self.config.style.highlight_taxa,
+            ):
                 tick_label.set_fontweight("bold")
 
         plt.subplots_adjust(
@@ -885,12 +1091,20 @@ class ANCOMBC2HeatmapPlotter:
         )
 
         if save_png:
-            out_png = os.path.join(self.config.paths.output_dir, out_base + ".png")
+            out_png = os.path.join(
+                self.config.paths.output_dir,
+                out_base + ".png",
+            )
+
             plt.savefig(out_png, dpi=300, bbox_inches="tight")
             print(f"Saved: {out_png}")
 
         if save_pdf:
-            out_pdf = os.path.join(self.config.paths.output_dir, out_base + ".pdf")
+            out_pdf = os.path.join(
+                self.config.paths.output_dir,
+                out_base + ".pdf",
+            )
+
             plt.savefig(out_pdf, bbox_inches="tight")
             print(f"Saved: {out_pdf}")
 
@@ -907,6 +1121,7 @@ class ANCOMBC2HeatmapPlotter:
         show: bool = True,
     ) -> None:
         meta = self.load_metadata()
+
         for subset in subsets:
             self.plot_subset(
                 meta_df=meta,
