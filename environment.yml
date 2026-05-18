@@ -1,0 +1,20 @@
+name: ancombc2-heatmaps-ci
+
+channels:
+  - conda-forge
+  - bioconda
+
+dependencies:
+  - python=3.10
+
+  - numpy
+  - pandas
+  - matplotlib
+  - seaborn
+
+  - biom-format
+
+  - pip
+
+  - pip:
+      - qiime2
