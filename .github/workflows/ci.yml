@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Conda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          environment-file: environment.yml
+          activate-environment: ancombc2-heatmaps-ci
+          auto-activate-base: false
+
+      - name: Install package
+        run: |
+          pip install -e .
+
+      - name: Smoke test
+        run: |
+          python -c "
+          import ancombc2_heatmaps as ah;
+
+          print('Package imported successfully');
+
+          required = [
+              'ANCOMBC2HeatmapPlotter',
+              'TaxonTrajectoryPlotter',
+              'TaxonBoxplotTrajectoryPlotter',
+              'PlotWorkflow',
+              'HeatmapConfig',
+              'MetadataConfig',
+              'ComparisonConfig',
+              'PathConfig',
+              'SubsetSpec',
+          ];
+
+          missing = [x for x in required if not hasattr(ah, x)];
+
+          assert not missing, f'Missing exports: {missing}';
+
+          print('All required classes found');
+          "

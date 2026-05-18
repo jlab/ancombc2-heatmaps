@@ -64,7 +64,7 @@ conda env create \
   -n qiime2-amplicon-2026.1 \
   -f ~/qiime2-amplicon-2026.1.yml
 ```
-.
+
 
 ---
 
@@ -79,7 +79,7 @@ and import it for example in your notebook with
 ```
 import ancombc2_heatmaps as ah
 ```
-.
+
 
 You also have to import numpy and Path from pathlib.
 
@@ -228,39 +228,6 @@ ancombc2_results/
 ```
 
 The files must contain the ANCOM-BC2 output tables in JSON lines format.
-
-The important columns are:
-
-```text
-taxon
-<effect_column>
-```
-
-For example:
-
-```text
-taxon
-description_of_treatment::sham
-```
-
-or:
-
-```text
-taxon
-sex::female
-```
-
-The effect column is defined in the comparison configuration:
-
-```python
-comparison=ah.ComparisonConfig(
-    variable_name="description_of_treatment",
-    positive_class="irradiated",
-    negative_class="sham",
-    effect_column="description_of_treatment::sham",
-    invert_sign=True,
-)
-```
 
 More information about the required ANCOM-BC2 result files is provided in the [ANCOM-BC2](#ancom-bc2) section.
 
