@@ -34,11 +34,17 @@ class TrajectoryMetadataConfig:
 @dataclass
 class TrajectoryPathConfig:
     metadata_path: str
-    table_base: str
-    ancom_base: str
+
+    table_base: str = ""
+    ancom_base: str = ""
 
     table_template: str = "{timepoint}/table_{timepoint}_{subset_label}.qza"
-    ancom_template: str = "{timepoint}/table_{timepoint}_{subset_label}_{variable_name}_ANCOMB_exported"
+    ancom_template: str = (
+        "{timepoint}/table_{timepoint}_{subset_label}_{variable_name}_ANCOMB_exported"
+    )
+
+    table_paths: Optional[Dict[str, str]] = None
+    ancom_paths: Optional[Dict[str, str]] = None
 
 
 @dataclass
@@ -65,8 +71,13 @@ class TrajectoryConfig:
 
 
 RANK_TO_PREFIX = {
-    "d": "d__", "k": "k__", "p": "p__", "c": "c__",
-    "o": "o__", "f": "f__", "g": "g__",
+    "d": "d__",
+    "k": "k__",
+    "p": "p__",
+    "c": "c__",
+    "o": "o__",
+    "f": "f__",
+    "g": "g__",
 }
 
 
@@ -77,24 +88,36 @@ def clean_float_formatter(x, pos):
 def load_qza_table_as_df(qza_fp: str) -> pd.DataFrame:
     art = qiime2.Artifact.load(qza_fp)
     table = art.view(Table)
+
     df = table.to_dataframe(dense=True)
     df.index = df.index.astype(str)
     df.columns = df.columns.astype(str)
+
     return df
 
 
 def clean_tax_piece(x):
     if x is None:
         return None
+
     x = str(x).strip()
+
     return x if x else None
 
 
 def is_empty_tax(x):
     if x is None:
         return True
+
     stripped = re.sub(r"^[a-z]__+", "", str(x)).strip().lower()
-    return stripped in {"", "uncultured", "unclassified", "unknown", "ambiguous_taxa"}
+
+    return stripped in {
+        "",
+        "uncultured",
+        "unclassified",
+        "unknown",
+        "ambiguous_taxa",
+    }
 
 
 def normalize_taxon_label(raw_tax):
@@ -109,14 +132,18 @@ def normalize_taxon_label(raw_tax):
     parts = [x for x in parts if x is not None]
 
     tax_map = {}
+
     for p in parts:
         p = p.strip()
+
         if "__" in p:
             prefix = p.split("__", 1)[0].lower()
+
             if not is_empty_tax(p):
                 tax_map[prefix] = p
 
     top_rank = None
+
     for rank in ["o", "c", "p", "k", "d"]:
         if rank in tax_map:
             top_rank = tax_map[rank]
@@ -131,23 +158,39 @@ def normalize_taxon_label(raw_tax):
 
 def parse_label(label):
     p = [x.strip() for x in str(label).split(";")]
+
     while len(p) < 3:
         p.append("_")
-    return {"top": p[0], "family": p[1], "genus": p[2]}
+
+    return {
+        "top": p[0],
+        "family": p[1],
+        "genus": p[2],
+    }
 
 
 def normalize_query(q):
     q = q.strip()
 
     if ";" in q:
-        return {"mode": "exact", "value": q}
+        return {
+            "mode": "exact",
+            "value": q,
+        }
 
     m = re.match(r"([a-zA-Z])_(.+)", q)
+
     if m:
         r, name = m.group(1).lower(), m.group(2)
+
         if r not in RANK_TO_PREFIX:
             raise ValueError(f"Unsupported rank prefix: {r}")
-        return {"mode": "rank", "rank": r, "value": RANK_TO_PREFIX[r] + name}
+
+        return {
+            "mode": "rank",
+            "rank": r,
+            "value": RANK_TO_PREFIX[r] + name,
+        }
 
     raise ValueError(
         "Invalid taxon_query. Use e.g. 'g_Akkermansia', "
@@ -165,22 +208,34 @@ def match_taxa(index, query):
         if spec["mode"] == "exact":
             if lab == spec["value"]:
                 matches.append(lab)
+
         else:
             r = spec["rank"]
+
             if r == "f" and parsed["family"] == spec["value"]:
                 matches.append(lab)
+
             elif r == "g" and parsed["genus"] == spec["value"]:
                 matches.append(lab)
-            elif r in ["o", "c", "p", "k", "d"] and parsed["top"] == spec["value"]:
+
+            elif (
+                r in ["o", "c", "p", "k", "d"]
+                and parsed["top"] == spec["value"]
+            ):
                 matches.append(lab)
 
     return matches
 
 
 def detect_effect_col(df, variable_name):
-    candidates = [c for c in df.columns if c.startswith(f"{variable_name}::")]
+    candidates = [
+        c for c in df.columns
+        if c.startswith(f"{variable_name}::")
+    ]
+
     if len(candidates) >= 1:
         return candidates[0]
+
     return None
 
 
@@ -191,14 +246,25 @@ def sig_to_label(is_sig):
 class TaxonTrajectoryPlotter:
     def __init__(self, config: TrajectoryConfig):
         self.config = config
-        sns.set_theme(style=config.plot.sns_style, context=config.plot.sns_context)
+        sns.set_theme(
+            style=config.plot.sns_style,
+            context=config.plot.sns_context,
+        )
 
     def load_metadata(self):
-        meta = pd.read_csv(self.config.paths.metadata_path, sep="\t", dtype=str)
+        meta = pd.read_csv(
+            self.config.paths.metadata_path,
+            sep="\t",
+            dtype=str,
+        )
+
         meta = meta.copy()
 
         tp_col = self.config.metadata.timepoint_col
-        meta["tp"] = meta[tp_col].map(self.config.metadata.timepoint_numeric_map)
+
+        meta["tp"] = meta[tp_col].map(
+            self.config.metadata.timepoint_numeric_map
+        )
 
         for col in meta.columns:
             if meta[col].dtype == object:
@@ -206,12 +272,19 @@ class TaxonTrajectoryPlotter:
 
         for col, allowed in self.config.metadata.allowed_values.items():
             if col not in meta.columns:
-                raise ValueError(f"allowed_values references unknown metadata column: {col}")
+                raise ValueError(
+                    f"allowed_values references unknown metadata column: {col}"
+                )
+
             meta = meta[meta[col].isin(allowed)].copy()
 
         return meta
 
-    def filter_metadata(self, meta: pd.DataFrame, subset: Optional[SubsetSpec]) -> pd.DataFrame:
+    def filter_metadata(
+        self,
+        meta: pd.DataFrame,
+        subset: Optional[SubsetSpec],
+    ) -> pd.DataFrame:
         out = meta.copy()
 
         if subset is None:
@@ -219,30 +292,61 @@ class TaxonTrajectoryPlotter:
 
         for col, val in subset.filters.items():
             if col not in out.columns:
-                raise ValueError(f"Subset filter references unknown metadata column: {col}")
+                raise ValueError(
+                    f"Subset filter references unknown metadata column: {col}"
+                )
 
             if isinstance(val, (list, tuple, set)):
                 out = out[out[col].isin(list(val))].copy()
+
             else:
                 out = out[out[col] == val].copy()
 
         return out
 
-    def get_table_qza(self, tp: str, subset: SubsetSpec) -> str:
+    def get_table_qza(
+        self,
+        tp: str,
+        subset: SubsetSpec,
+    ) -> str:
+        if self.config.paths.table_paths is not None:
+            if tp in self.config.paths.table_paths:
+                return self.config.paths.table_paths[tp]
+
         rel = self.config.paths.table_template.format(
             timepoint=tp,
             subset_label=subset.label,
             variable_name=self.config.metadata.comparison_col,
         )
-        return os.path.join(self.config.paths.table_base, rel)
 
-    def get_ancom_export_dir(self, tp: str, subset: SubsetSpec, variable_name: str) -> Optional[str]:
+        return os.path.join(
+            self.config.paths.table_base,
+            rel,
+        )
+
+    def get_ancom_export_dir(
+        self,
+        tp: str,
+        subset: SubsetSpec,
+        variable_name: str,
+    ) -> Optional[str]:
+        if self.config.paths.ancom_paths is not None:
+            p = self.config.paths.ancom_paths.get(tp)
+
+            if p is not None and os.path.isdir(p):
+                return p
+
         rel = self.config.paths.ancom_template.format(
             timepoint=tp,
             subset_label=subset.label,
             variable_name=variable_name,
         )
-        p = os.path.join(self.config.paths.ancom_base, rel)
+
+        p = os.path.join(
+            self.config.paths.ancom_base,
+            rel,
+        )
+
         return p if os.path.isdir(p) else None
 
     def build_df(
@@ -253,6 +357,7 @@ class TaxonTrajectoryPlotter:
         comparison_levels: Sequence[str],
     ) -> pd.DataFrame:
         rows = []
+
         meta_group = self.filter_metadata(meta, subset)
 
         sample_col = self.config.metadata.sample_col
@@ -266,34 +371,52 @@ class TaxonTrajectoryPlotter:
                 continue
 
             df = load_qza_table_as_df(fp)
-            df.index = [normalize_taxon_label(x) for x in df.index]
+
+            df.index = [
+                normalize_taxon_label(x)
+                for x in df.index
+            ]
+
             df = df.groupby(df.index).sum()
 
             col_sums = df.sum(axis=0)
             col_sums[col_sums == 0] = np.nan
+
             rel = df.div(col_sums, axis=1)
 
             matches = match_taxa(rel.index, taxon_query)
+
             if not matches:
                 continue
 
             vals = rel.loc[matches].sum()
 
             tp_num = self.config.metadata.timepoint_numeric_map.get(tp)
+
             m = meta_group.copy()
             m = m[m["tp"] == tp_num]
             m = m[m[sample_col].isin(vals.index)]
             m = m[m[comp_col].isin(comparison_levels)]
 
             for _, r in m.iterrows():
-                rows.append([
-                    r[mouse_col],
-                    r[comp_col],
-                    r["tp"],
-                    vals.get(r[sample_col], np.nan),
-                ])
+                rows.append(
+                    [
+                        r[mouse_col],
+                        r[comp_col],
+                        r["tp"],
+                        vals.get(r[sample_col], np.nan),
+                    ]
+                )
 
-        return pd.DataFrame(rows, columns=["mouse", "group", "tp", "abundance"]).dropna()
+        return pd.DataFrame(
+            rows,
+            columns=[
+                "mouse",
+                "group",
+                "tp",
+                "abundance",
+            ],
+        ).dropna()
 
     def build_ancom_significance_map(
         self,
@@ -304,7 +427,11 @@ class TaxonTrajectoryPlotter:
         sig_map = {}
 
         for tp in self.config.metadata.timepoint_order:
-            export_dir = self.get_ancom_export_dir(tp, subset=subset, variable_name=variable_name)
+            export_dir = self.get_ancom_export_dir(
+                tp,
+                subset=subset,
+                variable_name=variable_name,
+            )
 
             if export_dir is None:
                 continue
@@ -312,7 +439,10 @@ class TaxonTrajectoryPlotter:
             q_fp = os.path.join(export_dir, "q.jsonl")
             diff_fp = os.path.join(export_dir, "diff.jsonl")
 
-            if not (os.path.exists(q_fp) and os.path.exists(diff_fp)):
+            if not (
+                os.path.exists(q_fp)
+                and os.path.exists(diff_fp)
+            ):
                 continue
 
             q = pd.read_json(q_fp, lines=True)
@@ -323,29 +453,67 @@ class TaxonTrajectoryPlotter:
             if effect_col is None or effect_col not in diff.columns:
                 continue
 
-            tax_col_q = "taxon" if "taxon" in q.columns else q.columns[0]
-            tax_col_diff = "taxon" if "taxon" in diff.columns else diff.columns[0]
+            tax_col_q = (
+                "taxon"
+                if "taxon" in q.columns
+                else q.columns[0]
+            )
+
+            tax_col_diff = (
+                "taxon"
+                if "taxon" in diff.columns
+                else diff.columns[0]
+            )
 
             q_sub = q[[tax_col_q, effect_col]].rename(
-                columns={tax_col_q: "taxon_raw", effect_col: "q"}
+                columns={
+                    tax_col_q: "taxon_raw",
+                    effect_col: "q",
+                }
             )
+
             diff_sub = diff[[tax_col_diff, effect_col]].rename(
-                columns={tax_col_diff: "taxon_raw", effect_col: "diff"}
+                columns={
+                    tax_col_diff: "taxon_raw",
+                    effect_col: "diff",
+                }
             )
 
-            tmp = q_sub.merge(diff_sub, on="taxon_raw", how="inner").copy()
-            tmp["taxon"] = tmp["taxon_raw"].apply(normalize_taxon_label)
-            tmp["significant"] = (tmp["q"] < self.config.plot.q_cutoff) & (tmp["diff"] == True)
+            tmp = q_sub.merge(
+                diff_sub,
+                on="taxon_raw",
+                how="inner",
+            ).copy()
 
-            sig_by_taxon = tmp.groupby("taxon", as_index=True)["significant"].any()
+            tmp["taxon"] = tmp["taxon_raw"].apply(
+                normalize_taxon_label
+            )
 
-            matches = match_taxa(sig_by_taxon.index, taxon_query)
+            tmp["significant"] = (
+                (tmp["q"] < self.config.plot.q_cutoff)
+                & (tmp["diff"] == True)
+            )
+
+            sig_by_taxon = tmp.groupby(
+                "taxon",
+                as_index=True,
+            )["significant"].any()
+
+            matches = match_taxa(
+                sig_by_taxon.index,
+                taxon_query,
+            )
+
             tp_num = self.config.metadata.timepoint_numeric_map.get(tp)
 
             if tp_num is None:
                 continue
 
-            sig_map[tp_num] = bool(sig_by_taxon.loc[matches].any()) if matches else False
+            sig_map[tp_num] = (
+                bool(sig_by_taxon.loc[matches].any())
+                if matches
+                else False
+            )
 
         return sig_map
 
@@ -353,15 +521,18 @@ class TaxonTrajectoryPlotter:
         df = df.copy()
 
         if self.config.plot.merge_baselines:
-            df["tp_plot"] = df["tp"].replace({
-                -7: 0,
-                -4: 0,
-                -1: 0,
-                1: 1,
-                3: 3,
-                7: 7,
-                14: 14,
-            })
+            df["tp_plot"] = df["tp"].replace(
+                {
+                    -7: 0,
+                    -4: 0,
+                    -1: 0,
+                    1: 1,
+                    3: 3,
+                    7: 7,
+                    14: 14,
+                }
+            )
+
         else:
             df["tp_plot"] = df["tp"]
 
@@ -377,22 +548,40 @@ class TaxonTrajectoryPlotter:
             df_plot = self.apply_baseline(df)
 
             for _, g in df_plot.groupby(["tp_plot", "group"]):
-                vals = pd.to_numeric(g["abundance"], errors="coerce").dropna().to_numpy()
+                vals = pd.to_numeric(
+                    g["abundance"],
+                    errors="coerce",
+                ).dropna().to_numpy()
 
                 if len(vals) == 0:
                     continue
 
-                center = np.median(vals) if self.config.plot.estimator == "median" else np.mean(vals)
+                if self.config.plot.estimator == "median":
+                    center = np.median(vals)
+
+                else:
+                    center = np.mean(vals)
 
                 if self.config.plot.error_style == "iqr":
                     upper = np.percentile(vals, 75)
+
                 else:
                     rng = np.random.default_rng(42)
                     boots = []
-                    func = np.median if self.config.plot.estimator == "median" else np.mean
+
+                    if self.config.plot.estimator == "median":
+                        func = np.median
+
+                    else:
+                        func = np.mean
 
                     for _ in range(1000):
-                        sample = rng.choice(vals, size=len(vals), replace=True)
+                        sample = rng.choice(
+                            vals,
+                            size=len(vals),
+                            replace=True,
+                        )
+
                         boots.append(func(sample))
 
                     upper = np.percentile(boots, 97.5)
@@ -413,39 +602,72 @@ class TaxonTrajectoryPlotter:
         uppers = []
 
         for _, gs in g.groupby("group"):
-            vals = pd.to_numeric(gs["abundance"], errors="coerce").dropna().to_numpy()
+            vals = pd.to_numeric(
+                gs["abundance"],
+                errors="coerce",
+            ).dropna().to_numpy()
 
             if len(vals) == 0:
                 continue
 
             if self.config.plot.error_style == "iqr":
                 upper = np.percentile(vals, 75)
+
             else:
                 rng = np.random.default_rng(42)
-                func = np.median if self.config.plot.estimator == "median" else np.mean
+
+                if self.config.plot.estimator == "median":
+                    func = np.median
+
+                else:
+                    func = np.mean
+
                 boots = []
 
                 for _ in range(1000):
-                    sample = rng.choice(vals, size=len(vals), replace=True)
+                    sample = rng.choice(
+                        vals,
+                        size=len(vals),
+                        replace=True,
+                    )
+
                     boots.append(func(sample))
 
                 upper = np.percentile(boots, 97.5)
 
-            center = np.median(vals) if self.config.plot.estimator == "median" else np.mean(vals)
+            if self.config.plot.estimator == "median":
+                center = np.median(vals)
+
+            else:
+                center = np.mean(vals)
+
             uppers.append(max(center, upper))
 
         return max(uppers) if uppers else np.nan
 
-    def plot_single(self, df, title, comparison_levels, sig_map=None, ylim=None):
+    def plot_single(
+        self,
+        df,
+        title,
+        comparison_levels,
+        sig_map=None,
+        ylim=None,
+    ):
         if df.empty:
             print(f"No data: {title}")
             return
 
         df = self.apply_baseline(df)
 
-        fig, ax = plt.subplots(figsize=self.config.plot.figsize)
+        fig, ax = plt.subplots(
+            figsize=self.config.plot.figsize
+        )
 
-        dashes = self.config.plot.line_styles if self.config.plot.line_styles else True
+        dashes = (
+            self.config.plot.line_styles
+            if self.config.plot.line_styles
+            else True
+        )
 
         if self.config.plot.show_individual_lines:
             sns.lineplot(
@@ -463,7 +685,11 @@ class TaxonTrajectoryPlotter:
                 ax=ax,
             )
 
-        error_setting = ("ci", 95) if self.config.plot.error_style == "ci" else ("pi", 50)
+        error_setting = (
+            ("ci", 95)
+            if self.config.plot.error_style == "ci"
+            else ("pi", 50)
+        )
 
         sns.lineplot(
             data=df,
@@ -481,29 +707,61 @@ class TaxonTrajectoryPlotter:
             ax=ax,
         )
 
-        estimator_label = "median" if self.config.plot.estimator == "median" else "mean"
-        err_label = "± 95% CI" if self.config.plot.error_style == "ci" else "± IQR"
+        estimator_label = (
+            "median"
+            if self.config.plot.estimator == "median"
+            else "mean"
+        )
 
-        ax.set_title(f"{title}\n({estimator_label} {err_label})", pad=15)
+        err_label = (
+            "± 95% CI"
+            if self.config.plot.error_style == "ci"
+            else "± IQR"
+        )
+
+        ax.set_title(
+            f"{title}\n({estimator_label} {err_label})",
+            pad=15,
+        )
+
         ax.set_ylabel(self.config.plot.y_label)
         ax.set_xlabel("")
-        ax.yaxis.set_major_formatter(FuncFormatter(clean_float_formatter))
+
+        ax.yaxis.set_major_formatter(
+            FuncFormatter(clean_float_formatter)
+        )
 
         tp_vals = sorted(df["tp_plot"].dropna().unique())
+
         tp_labels = [
-            self.config.metadata.timepoint_label_map.get(tp, str(tp))
+            self.config.metadata.timepoint_label_map.get(
+                tp,
+                str(tp),
+            )
             for tp in tp_vals
         ]
 
         ax.set_xticks(tp_vals)
-        ax.set_xticklabels(tp_labels, rotation=35, ha="right")
 
-        if self.config.plot.y_lim == "auto_fix" and ylim is not None:
+        ax.set_xticklabels(
+            tp_labels,
+            rotation=35,
+            ha="right",
+        )
+
+        if (
+            self.config.plot.y_lim == "auto_fix"
+            and ylim is not None
+        ):
             ax.set_ylim(ylim)
+
         elif isinstance(self.config.plot.y_lim, tuple):
             ax.set_ylim(self.config.plot.y_lim)
 
-        if self.config.plot.show_significance and sig_map is not None:
+        if (
+            self.config.plot.show_significance
+            and sig_map is not None
+        ):
             y0, y1 = ax.get_ylim()
             y_range = y1 - y0
             offset = y_range * 0.012
@@ -516,14 +774,32 @@ class TaxonTrajectoryPlotter:
                 if pd.isna(visible_upper):
                     continue
 
-                original_tps = sorted(pd.to_numeric(g["tp"], errors="coerce").dropna().unique())
+                original_tps = sorted(
+                    pd.to_numeric(
+                        g["tp"],
+                        errors="coerce",
+                    ).dropna().unique()
+                )
 
-                if tp_plot == 0 and self.config.plot.merge_baselines:
-                    is_sig = any(sig_map.get(tp_num, False) for tp_num in [-7, -4, -1])
+                if (
+                    tp_plot == 0
+                    and self.config.plot.merge_baselines
+                ):
+                    is_sig = any(
+                        sig_map.get(tp_num, False)
+                        for tp_num in [-7, -4, -1]
+                    )
+
                 else:
-                    is_sig = any(sig_map.get(int(tp_num), False) for tp_num in original_tps)
+                    is_sig = any(
+                        sig_map.get(int(tp_num), False)
+                        for tp_num in original_tps
+                    )
 
-                y = min(visible_upper + offset, y1 - y_range * 0.03)
+                y = min(
+                    visible_upper + offset,
+                    y1 - y_range * 0.03,
+                )
 
                 ax.text(
                     tp_plot,
@@ -535,6 +811,7 @@ class TaxonTrajectoryPlotter:
                 )
 
         handles, labels = ax.get_legend_handles_labels()
+
         seen = set()
         clean_handles = []
         clean_labels = []
@@ -553,6 +830,7 @@ class TaxonTrajectoryPlotter:
                 lw=0,
                 label="* ANCOM significant\nns : not significant",
             )
+
             clean_handles.append(star_legend)
             clean_labels.append(star_legend.get_label())
 
@@ -578,7 +856,9 @@ class TaxonTrajectoryPlotter:
 
         if comparison_levels is None:
             comparison_levels = sorted(
-                meta[self.config.metadata.comparison_col].dropna().unique()
+                meta[
+                    self.config.metadata.comparison_col
+                ].dropna().unique()
             )
 
         df = self.build_df(
@@ -594,7 +874,11 @@ class TaxonTrajectoryPlotter:
             variable_name=self.config.metadata.comparison_col,
         )
 
-        ylim = self.compute_global_ylim([df]) if self.config.plot.y_lim == "auto_fix" else None
+        ylim = (
+            self.compute_global_ylim([df])
+            if self.config.plot.y_lim == "auto_fix"
+            else None
+        )
 
         self.plot_single(
             df=df,
@@ -604,16 +888,26 @@ class TaxonTrajectoryPlotter:
             ylim=ylim,
         )
 
-    def list_available_queries(self, qza_fp: str) -> Dict[str, List[str]]:
+    def list_available_queries(
+        self,
+        qza_fp: str,
+    ) -> Dict[str, List[str]]:
         df = load_qza_table_as_df(qza_fp)
-        taxa = [normalize_taxon_label(x) for x in df.index]
+
+        taxa = [
+            normalize_taxon_label(x)
+            for x in df.index
+        ]
 
         families = set()
         phyla = set()
         genera = set()
 
         for t in taxa:
-            parts = [p.strip() for p in str(t).split(";")]
+            parts = [
+                p.strip()
+                for p in str(t).split(";")
+            ]
 
             top = parts[0] if len(parts) > 0 else "_"
             family = parts[1] if len(parts) > 1 else "_"
@@ -621,6 +915,7 @@ class TaxonTrajectoryPlotter:
 
             if family.startswith("f__"):
                 name = re.sub(r"^f__", "", family)
+
                 if name and name.lower() not in {
                     "uncultured",
                     "unclassified",
@@ -632,6 +927,7 @@ class TaxonTrajectoryPlotter:
 
             if genus.startswith("g__"):
                 name = re.sub(r"^g__", "", genus)
+
                 if name and name.lower() not in {
                     "uncultured",
                     "unclassified",
@@ -643,6 +939,7 @@ class TaxonTrajectoryPlotter:
 
             if top.startswith("p__"):
                 name = re.sub(r"^p__", "", top)
+
                 if name and name.lower() not in {
                     "uncultured",
                     "unclassified",
