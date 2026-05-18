@@ -963,7 +963,6 @@ then positive log fold changes correspond to higher abundance in `sham`, unless 
 
 
 # Trajectory Workflow
-# Trajectory Workflow
 
 The trajectory workflow is used to visualize taxon abundance changes across timepoints.
 
@@ -973,10 +972,10 @@ Trajectory plots combine:
 - metadata
 - optional ANCOM-BC2 significance information
 
-The workflow supports:
+Supported features include:
 
 - mean or median trajectories
-- interquartile range or confidence intervals
+- IQR or confidence intervals
 - optional individual mouse trajectories
 - optional ANCOM significance annotations
 - optional baseline merging
@@ -993,12 +992,8 @@ import ancombc2_heatmaps as ah
 
 # 2. Define timepoints
 
-Trajectory plots require ordered and numeric timepoints.
-
-Example:
-
 ```python
-timepoint_order = [
+timepoints = [
     "baseline1",
     "baseline2",
     "baseline3",
@@ -1015,18 +1010,6 @@ timepoint_order = [
 
 Trajectory plots use `TrajectoryConfig`.
 
-It consists of:
-
-| Config class | Purpose |
-|---|---|
-| `TrajectoryMetadataConfig` | Metadata handling and timepoint mapping |
-| `TrajectoryPathConfig` | Input paths |
-| `TrajectoryPlotConfig` | Plot styling and statistics |
-
----
-
-# 4. Metadata configuration
-
 Example:
 
 ```python
@@ -1038,28 +1021,27 @@ trajectory_config = ah.TrajectoryConfig(
 
         timepoint_col="time_point",
 
-        mouse_col="mouse_id",
+        mouse_col="host_subject_id",
 
         comparison_col="description_of_treatment",
 
-        genotype_col="mice_model",
-
-        treatment_col="description_of_treatment",
-
-        timepoint_order=[
-            "baseline1",
-            "baseline2",
-            "baseline3",
-            "day1",
-            "day3",
-            "day7",
-            "day14",
-        ],
+        timepoint_order=timepoints,
 
         timepoint_numeric_map={
+
+            "baseline_1": -7,
+            "baseline_2": -4,
+            "baseline_3": -1,
+
+            "day_1_post": 1,
+            "day_3_post": 3,
+            "day_7_post": 7,
+            "day_14_post": 14,
+
             "baseline1": -7,
             "baseline2": -4,
             "baseline3": -1,
+
             "day1": 1,
             "day3": 3,
             "day7": 7,
@@ -1075,287 +1057,45 @@ trajectory_config = ah.TrajectoryConfig(
             7: "day7",
             14: "day14",
         },
-
-        allowed_values={
-            "description_of_treatment": [
-                "sham",
-                "irradiated",
-            ],
-        },
-    ),
-```
-
----
-
-# 5. MetadataConfig options
-
-| Option | Description |
-|---|---|
-| `sample_col` | Metadata column containing sample IDs |
-| `timepoint_col` | Metadata column containing timepoints |
-| `mouse_col` | Metadata column identifying individual animals |
-| `comparison_col` | Main comparison variable |
-| `genotype_col` | Optional genotype column |
-| `treatment_col` | Optional treatment column |
-| `timepoint_order` | Defines loading and plotting order |
-| `timepoint_numeric_map` | Converts metadata timepoints into numeric positions |
-| `timepoint_label_map` | Controls displayed x-axis labels |
-| `allowed_values` | Optional metadata filtering |
-
----
-
-# 6. Numeric timepoint mapping
-
-Trajectory plots require numeric timepoints.
-
-Example:
-
-```python
-timepoint_numeric_map={
-    "baseline1": -7,
-    "baseline2": -4,
-    "baseline3": -1,
-    "day1": 1,
-    "day3": 3,
-    "day7": 7,
-    "day14": 14,
-}
-```
-
-The numeric values are used for:
-
-- trajectory positioning
-- temporal ordering
-- baseline merging
-- significance alignment
-
-The exact numbers do not need to represent real days, but should preserve the temporal order.
-
----
-
-# 7. Path configuration
-
-Example:
-
-```python
-paths=ah.TrajectoryPathConfig(
-
-    metadata_path="/path/to/metadata.tsv",
-
-    table_base="/path/to/qza_tables",
-
-    ancom_base="/path/to/exported_ancom_results",
-
-    table_template=(
-        "{timepoint}/table_{timepoint}_{subset_label}.qza"
     ),
 
-    ancom_template=(
-        "{timepoint}/table_{timepoint}_{subset_label}_{variable_name}_ANCOMB_exported"
+    paths=ah.TrajectoryPathConfig(
+
+        metadata_path="/path/to/metadata.tsv",
+
+        table_base="/path/to/qza_tables",
+
+        ancom_base="/path/to/ancom_exports",
+
+        table_template=(
+            "{timepoint}/table_{timepoint}_{subset_label}.qza"
+        ),
+
+        ancom_template=(
+            "{timepoint}/table_{timepoint}_{subset_label}_treat_ANCOMB_exported"
+        ),
+    ),
+
+    plot=ah.TrajectoryPlotConfig(
+
+        estimator="mean",
+
+        error_style="iqr",
+
+        show_individual_lines=True,
+
+        merge_baselines=False,
+
+        show_significance=True,
+
+        figsize=(12, 8),
     ),
 )
 ```
 
 ---
 
-# 8. PathConfig options
-
-| Option | Description |
-|---|---|
-| `metadata_path` | Metadata file |
-| `table_base` | Base folder containing `.qza` feature tables |
-| `ancom_base` | Base folder containing exported ANCOM-BC2 results |
-| `table_template` | Relative path pattern for `.qza` tables |
-| `ancom_template` | Relative path pattern for exported ANCOM folders |
-
-Available template placeholders:
-
-| Placeholder | Meaning |
-|---|---|
-| `{timepoint}` | Current timepoint |
-| `{subset_label}` | Current subset label |
-| `{variable_name}` | Comparison variable |
-
----
-
-# 9. Plot configuration
-
-Example:
-
-```python
-plot=ah.TrajectoryPlotConfig(
-
-    estimator="mean",
-
-    error_style="iqr",
-
-    show_individual_lines=False,
-
-    merge_baselines=False,
-
-    y_lim="auto_fix",
-
-    show_significance=True,
-
-    q_cutoff=0.05,
-
-    figsize=(12, 8),
-
-    line_styles={
-        "sham": "-",
-        "irradiated": "--",
-    },
-
-    sns_style="whitegrid",
-
-    sns_context="talk",
-
-    y_label="relative abundance",
-)
-```
-
----
-
-# 10. PlotConfig options
-
-## Estimator
-
-Controls the central statistic.
-
-```python
-estimator="mean"
-```
-
-Options:
-
-| Value | Meaning |
-|---|---|
-| `"mean"` | Plot group means |
-| `"median"` | Plot group medians |
-
----
-
-## Error intervals
-
-```python
-error_style="iqr"
-```
-
-Options:
-
-| Value | Meaning |
-|---|---|
-| `"iqr"` | Interquartile range |
-| `"ci"` | Bootstrap 95% confidence interval |
-
----
-
-## Individual mouse trajectories
-
-```python
-show_individual_lines=True
-```
-
-Displays one trajectory per mouse in the background.
-
-Useful for:
-
-- variability inspection
-- outlier detection
-- trajectory consistency
-
----
-
-## Baseline merging
-
-```python
-merge_baselines=True
-```
-
-Merges:
-
-```text
-baseline1
-baseline2
-baseline3
-```
-
-into one baseline position.
-
-Useful when baseline replicates should be visualized together.
-
----
-
-## Y-axis scaling
-
-```python
-y_lim="auto_fix"
-```
-
-Options:
-
-| Value | Meaning |
-|---|---|
-| `"auto_fix"` | Automatically determine y-axis limits |
-| `(0, 0.05)` | Manual y-axis limits |
-
-Example:
-
-```python
-y_lim=(0, 0.05)
-```
-
----
-
-## ANCOM significance
-
-```python
-show_significance=True
-```
-
-Displays:
-
-```text
-*
-ns
-```
-
-above timepoints.
-
-The significance threshold is controlled by:
-
-```python
-q_cutoff=0.05
-```
-
----
-
-## Figure size
-
-```python
-figsize=(12, 8)
-```
-
-Controls matplotlib figure dimensions.
-
----
-
-## Line styles
-
-```python
-line_styles={
-    "sham": "-",
-    "irradiated": "--",
-}
-```
-
-Allows custom line styles for groups.
-
----
-
-
-
-# 11. Create the plotter
+# 4. Create the plotter
 
 ```python
 plotter = ah.TaxonTrajectoryPlotter(
@@ -1365,41 +1105,29 @@ plotter = ah.TaxonTrajectoryPlotter(
 
 ---
 
-# 12. Create a subset
+# 5. Create a subset
 
 Example:
 
 ```python
 subset = ah.SubsetSpec(
-    label="WT",
-    title="WT mice",
+    label="WT_genus_ANCOM",
+
+    title="WT | sham vs irradiated",
+
     filters={
         "mice_model": "WT",
-    },
-)
-```
-
-Example with multiple filters:
-
-```python
-subset = ah.SubsetSpec(
-    label="WT_female",
-    title="WT female mice",
-    filters={
-        "mice_model": "WT",
-        "sex": "female",
     },
 )
 ```
 
 ---
 
-# 13. Plot a trajectory
-
-Example:
+# 6. Plot a trajectory
 
 ```python
 plotter.plot_taxon(
+
     taxon_query="g_Akkermansia",
 
     subset=subset,
@@ -1413,9 +1141,42 @@ plotter.plot_taxon(
 
 ---
 
-# 14. Taxon queries
+# 7. Fixed paths
 
-The trajectory workflow supports several query formats.
+The workflow also supports manually defined paths.
+
+Example:
+
+```python
+paths=ah.TrajectoryPathConfig(
+
+    metadata_path="/path/to/metadata.tsv",
+
+    table_paths={
+
+        "baseline1":
+            "/path/to/table_baseline1.qza",
+
+        "baseline2":
+            "/path/to/table_baseline2.qza",
+    },
+
+    ancom_paths={
+
+        "baseline1":
+            "/path/to/baseline1_ANCOMB_exported",
+
+        "baseline2":
+            "/path/to/baseline2_ANCOMB_exported",
+    },
+)
+```
+
+---
+
+# 8. Taxon queries
+
+Supported query formats:
 
 ## Genus
 
@@ -1447,105 +1208,37 @@ taxon_query=(
 
 ---
 
-# 15. Comparison levels
+# 9. Important plot options
 
-```python
-comparison_levels=[
-    "sham",
-    "irradiated",
-]
-```
-
-Defines which groups should be plotted.
-
-If omitted, all available groups are plotted automatically.
-
+| Option | Description |
+|---|---|
+| `estimator="mean"` | Plot group means |
+| `estimator="median"` | Plot group medians |
+| `error_style="iqr"` | Interquartile range |
+| `error_style="ci"` | Bootstrap confidence interval |
+| `show_individual_lines=True` | Show one trajectory per mouse |
+| `merge_baselines=True` | Merge baseline timepoints |
+| `show_significance=True` | Show ANCOM significance labels |
+| `y_lim="auto_fix"` | Automatic y-axis scaling |
 
 ---
 
-# 16. Full minimal example
+# 10. Using PlotWorkflow
+
+You can combine heatmap and trajectory plotting:
 
 ```python
-import ancombc2_heatmaps as ah
-
-
-trajectory_config = ah.TrajectoryConfig(
-
-    metadata=ah.TrajectoryMetadataConfig(
-
-        sample_col="sample_name",
-
-        timepoint_col="time_point",
-
-        mouse_col="mouse_id",
-
-        comparison_col="description_of_treatment",
-
-        timepoint_order=[
-            "baseline1",
-            "baseline2",
-            "baseline3",
-            "day1",
-            "day3",
-            "day7",
-            "day14",
-        ],
-
-        timepoint_numeric_map={
-            "baseline1": -7,
-            "baseline2": -4,
-            "baseline3": -1,
-            "day1": 1,
-            "day3": 3,
-            "day7": 7,
-            "day14": 14,
-        },
-
-        timepoint_label_map={
-            -7: "baseline1",
-            -4: "baseline2",
-            -1: "baseline3",
-            1: "day1",
-            3: "day3",
-            7: "day7",
-            14: "day14",
-        },
-    ),
-
-    paths=ah.TrajectoryPathConfig(
-        metadata_path="/path/to/metadata.tsv",
-
-        table_base="/path/to/qza_tables",
-
-        ancom_base="/path/to/ancom_exports",
-    ),
-
-    plot=ah.TrajectoryPlotConfig(
-        estimator="mean",
-        error_style="iqr",
-        show_significance=True,
-        merge_baselines=False,
-    ),
+workflow = ah.PlotWorkflow(
+    heatmap_config=heatmap_config,
+    trajectory_config=trajectory_config,
 )
+```
 
+Then plot trajectories via:
 
-plotter = ah.TaxonTrajectoryPlotter(
-    trajectory_config
-)
+```python
+workflow.plot_trajectory(
 
-
-subset = ah.SubsetSpec(
-    label="WT",
-
-    title="WT mice",
-
-    filters={
-        "mice_model": "WT",
-    },
-)
-
-
-plotter.plot_taxon(
     taxon_query="g_Akkermansia",
 
     subset=subset,
@@ -1559,28 +1252,21 @@ plotter.plot_taxon(
 
 ---
 
-# 17. Trajectory interpretation
+# 11. Interpretation
 
 Trajectory plots visualize abundance changes across timepoints.
-
-General interpretation:
 
 | Visual element | Meaning |
 |---|---|
 | Colored lines | Group trajectories |
 | Points | Group mean or median |
 | Error intervals | IQR or confidence interval |
-| Background lines | Optional individual mouse trajectories |
+| Background lines | Individual mouse trajectories |
 | `*` | ANCOM significant |
 | `ns` | Not significant |
 
-The exact interpretation depends on:
 
-- selected estimator
-- selected error interval
-- ANCOM-BC2 comparison direction
-- subset definition
-
-```
 
 ## ANCOM-BC2
+
+
