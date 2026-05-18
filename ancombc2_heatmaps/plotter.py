@@ -74,9 +74,15 @@ class MetadataConfig:
 @dataclass
 class ComparisonConfig:
     variable_name: str
+
+    # optional manual labels
     positive_class: Optional[str] = None
     negative_class: Optional[str] = None
+
+    # optional manual effect-column override
     effect_column: Optional[str] = None
+
+    # optional manual direction override
     invert_sign: Optional[bool] = None
 
 
@@ -87,8 +93,13 @@ class PathConfig:
     metadata_path: str
     output_dir: str
 
+    # template mode
     table_template: str = "{timepoint}/table_{timepoint}_{subset_label}.qza"
     ancom_template: str = "{timepoint}/table_{timepoint}_{subset_label}_ANCOMB_exported"
+
+    # manual mapping mode
+    table_paths: Optional[Dict[str, str]] = None
+    ancom_paths: Optional[Dict[str, str]] = None
 
     lfc_filename: str = "lfc.jsonl"
     q_filename: str = "q.jsonl"
@@ -158,14 +169,6 @@ def read_table_auto(filepath: str) -> pd.DataFrame:
 
 
 def read_export_tsv(tsv_fp: str) -> pd.DataFrame:
-    """
-    Robust reader for exported TSV files.
-    Handles both:
-    - old style: header directly in first row
-    - new style: one extra leading line before real header
-
-    Also normalizes '#OTU ID' -> 'feature'
-    """
     df = pd.read_csv(tsv_fp, sep="\t")
 
     if "#OTU ID" not in df.columns and "feature" not in df.columns:
@@ -427,6 +430,14 @@ class ANCOMBC2HeatmapPlotter:
         timepoint: str,
         subset: SubsetSpec,
     ) -> str:
+        if self.config.paths.table_paths is not None:
+            if timepoint not in self.config.paths.table_paths:
+                raise ValueError(
+                    f"No table path configured for timepoint '{timepoint}'."
+                )
+
+            return self.config.paths.table_paths[timepoint]
+
         rel = self.config.paths.table_template.format(
             timepoint=timepoint,
             subset_label=subset.label,
@@ -439,6 +450,14 @@ class ANCOMBC2HeatmapPlotter:
         timepoint: str,
         subset: SubsetSpec,
     ) -> str:
+        if self.config.paths.ancom_paths is not None:
+            if timepoint not in self.config.paths.ancom_paths:
+                raise ValueError(
+                    f"No ANCOM path configured for timepoint '{timepoint}'."
+                )
+
+            return self.config.paths.ancom_paths[timepoint]
+
         rel = self.config.paths.ancom_template.format(
             timepoint=timepoint,
             subset_label=subset.label,
