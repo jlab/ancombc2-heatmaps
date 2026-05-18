@@ -13,7 +13,9 @@ class PlotWorkflow:
     def __post_init__(self):
         self.heatmap_plotter = ANCOMBC2HeatmapPlotter(self.heatmap_config)
         self.trajectory_plotter = TaxonTrajectoryPlotter(self.trajectory_config)
-        self.boxplot_trajectory_plotter = TaxonBoxplotTrajectoryPlotter(self.trajectory_config)
+        self.boxplot_trajectory_plotter = TaxonBoxplotTrajectoryPlotter(
+            self.trajectory_config
+        )
 
         self.heatmap_meta = self.heatmap_plotter.load_metadata()
         self.trajectory_meta = self.trajectory_plotter.load_metadata()
@@ -52,52 +54,6 @@ class PlotWorkflow:
         trend_order=2,
     ):
         return self.boxplot_trajectory_plotter.plot_taxon_boxplot(
-            taxon_query=taxon_query,
-            subset=subset,
-            comparison_levels=comparison_levels,
-            show_trend=show_trend,
-            trend_order=trend_order,
-        )
-
-    def plot_heatmap_and_trajectory(
-        self,
-        subset,
-        taxon_query,
-        comparison_levels=None,
-        heatmap_kwargs=None,
-    ):
-        if heatmap_kwargs is None:
-            heatmap_kwargs = {}
-
-        self.plot_heatmap(
-            subset=subset,
-            **heatmap_kwargs,
-        )
-
-        self.plot_trajectory(
-            taxon_query=taxon_query,
-            subset=subset,
-            comparison_levels=comparison_levels,
-        )
-
-    def plot_heatmap_and_boxplot_trajectory(
-        self,
-        subset,
-        taxon_query,
-        comparison_levels=None,
-        heatmap_kwargs=None,
-        show_trend=True,
-        trend_order=2,
-    ):
-        if heatmap_kwargs is None:
-            heatmap_kwargs = {}
-
-        self.plot_heatmap(
-            subset=subset,
-            **heatmap_kwargs,
-        )
-
-        self.plot_boxplot_trajectory(
             taxon_query=taxon_query,
             subset=subset,
             comparison_levels=comparison_levels,
