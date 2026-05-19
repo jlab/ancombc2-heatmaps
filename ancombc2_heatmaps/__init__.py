@@ -1,23 +1,14 @@
-from .plotter import (
-    ANCOMBC2HeatmapPlotter,
-    HeatmapConfig,
-    MetadataConfig,
-    ComparisonConfig,
-    PathConfig,
-    PlotTextConfig,
-    HeatmapStyleConfig,
-    TaxonomyConfig,
-    SubsetSpec,
-)
+from .config import ANCOMConfig, PlotConfig, Subset
+from .data import ANCOMData
+from .workflow import ANCOMWorkflow
 
-from .trajectory_plotter import (
-    TaxonTrajectoryPlotter,
-    TrajectoryConfig,
-    TrajectoryMetadataConfig,
-    TrajectoryPathConfig,
-    TrajectoryPlotConfig,
-)
+__version__ = "2.0.0"
 
-from .boxplot_trajectory_plotter import TaxonBoxplotTrajectoryPlotter
-
-from .workflows import PlotWorkflow
+__all__ = [
+    "ANCOMConfig",
+    "PlotConfig",
+    "Subset",
+    "ANCOMData",
+    "ANCOMWorkflow",
+    "__version__",
+]
