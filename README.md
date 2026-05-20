@@ -1,207 +1,190 @@
-[!FIXME]
-# Heatmap packgage 
+# ANCOM-BC2 Heatmaps and Taxon Trajectories
+
+Reusable plotting utilities for ANCOM-BC2 log fold change heatmaps, taxon trajectory plots and boxplot trajectory plots from QIIME2 feature tables and exported ANCOM-BC2 results.
 
 ## Table of Contents
 
 - [Summary](#summary)
 - [Installation](#installation)
 - [Input Data](#input-data)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Path Handling](#path-handling)
 - [Heatmap Workflow](#heatmap-workflow)
 - [Trajectory Workflow](#trajectory-workflow)
 - [Boxplot Workflow](#boxplot-workflow)
-- [ANCOM-BC2](#ancom-bc2) # if required
-
+- [Subsets](#subsets)
+- [Taxon Queries](#taxon-queries)
+- [ANCOM-BC2 Direction](#ancom-bc2-direction)
+- [Troubleshooting](#troubleshooting)
+- [Migration from older versions](#migration-from-older-versions)
 
 ---
 
 ## Summary
 
-blablabla
+This package helps visualize ANCOM-BC2 results across multiple timepoints.
+
+It supports:
+
+- ANCOM-BC2 log fold change heatmaps
+- taxon trajectory plots over time
+- boxplot trajectory plots with sample points
+- optional ANCOM significance labels for trajectory plots
+- template-based or fully explicit file paths
+- metadata-based subsets, for example WT only, Apc only, male only, female only, or all samples
+
+The package is designed for QIIME2-based microbiome workflows where each timepoint has:
+
+1. a QIIME2 feature table (`.qza`)
+2. an exported ANCOM-BC2 result directory containing:
+   - `lfc.jsonl`
+   - `q.jsonl`
+   - `diff.jsonl`
 
 ---
 
 ## Installation
 
-The installation of the package can be done from GitHub via git in the console:
+Install the package from GitHub:
 
-[!FIXME] # maybe a change after making it public
-```
-pip install git+ssh://git@github.com/jlab/ancombc2-heatmaps.git  
-```
-
-
-
-Please be aware that you have to activate the correct conda environment with an Qiime2 Version that is not too old.<br>
-I recommend "qiime2-amplicon-2026.1".
-
----
-
-To see your available environments use:
-
-```
-conda env list
+```bash
+pip install git+ssh://git@github.com/jlab/ancombc2-heatmaps.git
 ```
 
-and to activate the correct one use:
 
-```
+The package requires QIIME2 because `.qza` feature tables are loaded through the QIIME2 API.
+
+Recommended environment:
+
+```bash
 conda activate qiime2-amplicon-2026.1
 ```
 
-if you don't have a working Qiime2 Environment you can find a good YAML here:
+To see available conda environments:
 
-https://github.com/qiime2/distributions
-
-```
-wget https://raw.githubusercontent.com/qiime2/distributions/dev/2026.1/amplicon/released/qiime2-amplicon-ubuntu-latest-conda.yml \
-  -O qiime2-amplicon-2026.1.yml
+```bash
+conda env list
 ```
 
-and install it with
+To check your QIIME2 version:
 
-```
-conda env create \
-  -n qiime2-amplicon-2026.1 \
-  -f ~/qiime2-amplicon-2026.1.yml
-```
-
-
----
-
-After installation you can check the version with
-
-```
+```bash
 qiime --version
 ```
 
-and import it for example in your notebook with
+If you do not have a working QIIME2 environment, you can install one from the official QIIME2 distribution YAMLs:
 
+```bash
+wget https://raw.githubusercontent.com/qiime2/distributions/dev/2026.1/amplicon/released/qiime2-amplicon-ubuntu-latest-conda.yml \
+  -O qiime2-amplicon-2026.1.yml
+
+conda env create \
+  -n qiime2-amplicon-2026.1 \
+  -f qiime2-amplicon-2026.1.yml
 ```
+
+Import the package in Python or in a notebook:
+
+```python
 import ancombc2_heatmaps as ah
+
+print(ah.__version__)
 ```
 
-
-You also have to import numpy and Path from pathlib.
-
-```
-from pathlib import Path
-import pandas as pd
-```
 ---
 
 ## Input Data
 
-## Required input files
+The package expects three main input types:
 
-After importing the package, the plotting functions require three main types of input files:
-
-1. A metadata table
-2. QIIME2 feature tables
-3. Exported ANCOM-BC2 result files
+| File type | Format | Used for |
+|---|---|---|
+| Metadata table | `.tsv`, `.txt` or `.csv` | sample information, groups, timepoints and subsets |
+| QIIME2 feature tables | `.qza` | relative abundance calculation |
+| ANCOM-BC2 export folders | folder with `lfc.jsonl`, `q.jsonl`, `diff.jsonl` | log fold changes and significance |
 
 ---
 
 ## 1. Metadata table
 
-The metadata file must be a tab-separated text file (`.tsv` or `.txt`).
-
-Example:
+The metadata file should contain at least:
 
 ```text
-#SampleID	time_point	description_of_treatment	mice_model	sex
-sample_1	baseline1	sham	WT	female
-sample_2	baseline1	irradiated	WT	male
-sample_3	day1	sham	Apc	female
+sample column
+timepoint column
+group column
 ```
 
-The required columns depend on the configuration.
-
-For heatmaps, the metadata must contain at least:
+Example metadata:
 
 ```text
-sample_col
-timepoint_col
-comparison_col
+sample_name	time_point	description_of_treatment	mice_model	sex
+sample_1	baseline_1	sham	WT	female
+sample_2	baseline_1	irradiated	WT	male
+sample_3	day_1_post	sham	Apc	female
+sample_4	day_1_post	irradiated	Apc	male
 ```
 
-Example:
+In the config, these columns are specified with:
 
 ```python
-metadata=ah.MetadataConfig(
-    sample_col="#SampleID",
-    timepoint_col="time_point",
-    comparison_col="description_of_treatment",
-)
+sample_col="sample_name"
+timepoint_col="time_point"
+group_col="description_of_treatment"
 ```
 
-This means the metadata table must contain the columns:
-
-```text
-#SampleID
-time_point
-description_of_treatment
-```
-
-For trajectory plots, the metadata must contain at least:
-
-```text
-sample_col
-timepoint_col
-mouse_col
-comparison_col
-```
-
-Example:
+A subject column can be used for individual lines in trajectory plots:
 
 ```python
-metadata=ah.TrajectoryMetadataConfig(
-    sample_col="#SampleID",
-    timepoint_col="time_point",
-    mouse_col="mouse_id",
-    comparison_col="description_of_treatment",
-)
+subject_col="host_taxon_id"
 ```
+
+If there is no subject or host ID column, use:
+
+```python
+subject_col=None
+```
+
+Then the package uses the sample ID as fallback.
 
 ---
 
 ## 2. QIIME2 feature tables
 
-The package expects QIIME2 feature tables in `.qza` format.
+Feature tables must be QIIME2 `.qza` tables that can be loaded as BIOM tables.
 
-These tables are used to calculate relative abundances for the heatmap cell annotations and trajectory plots.
+The tables are used to calculate relative abundances for:
 
-Example file structure:
+- heatmap cell annotations
+- trajectory plots
+- boxplot trajectory plots
+
+Example:
 
 ```text
-collapsed_tables/
-├── genus/
-│   └── by_treatment/
-│       ├── baseline1/
-│       │   └── table_baseline1_all_genus.qza
-│       ├── day1/
-│       │   └── table_day1_all_genus.qza
-│       └── day3/
-│           └── table_day3_all_genus.qza
+heatmaps_genus_by_timepoint/
+├── table_baseline1_genus_ANCOM.qza
+├── table_baseline2_genus_ANCOM.qza
+├── table_baseline3_genus_ANCOM.qza
+├── table_day1_genus_ANCOM.qza
+├── table_day3_genus_ANCOM.qza
+├── table_day7_genus_ANCOM.qza
+└── table_day14_genus_ANCOM.qza
 ```
 
-The exact filenames are defined in the configuration:
+This structure can be represented with:
 
 ```python
-paths=ah.PathConfig(
-    base_table_dir="path/to/collapsed_tables/genus/by_treatment",
-    table_template="{timepoint}/table_{timepoint}_{subset_label}.qza",
-)
+table_base="/path/to/heatmaps_genus_by_timepoint"
+table_template="table_{timepoint}_genus_ANCOM.qza"
 ```
-
-The `.qza` files must contain feature tables that can be loaded as BIOM tables through QIIME2.
 
 ---
 
 ## 3. Exported ANCOM-BC2 result files
 
-The package expects exported ANCOM-BC2 result folders.
-
-Each exported folder must contain:
+Each exported ANCOM-BC2 result folder must contain:
 
 ```text
 lfc.jsonl
@@ -212,530 +195,453 @@ diff.jsonl
 Example:
 
 ```text
-ancombc2_results/
-├── genus/
-│   └── by_treatment/
-│       ├── baseline1/
-│       │   └── table_baseline1_all_genus_ANCOMBC2_exported/
-│       │       ├── lfc.jsonl
-│       │       ├── q.jsonl
-│       │       └── diff.jsonl
-│       ├── day1/
-│       │   └── table_day1_all_genus_ANCOMBC2_exported/
-│       │       ├── lfc.jsonl
-│       │       ├── q.jsonl
-│       │       └── diff.jsonl
+real_ANCOMB_BC2/
+├── baseline1_treat_ANCOMB_exported/
+│   ├── lfc.jsonl
+│   ├── q.jsonl
+│   └── diff.jsonl
+├── baseline2_treat_ANCOMB_exported/
+│   ├── lfc.jsonl
+│   ├── q.jsonl
+│   └── diff.jsonl
+└── day1_treat_ANCOMB_exported/
+    ├── lfc.jsonl
+    ├── q.jsonl
+    └── diff.jsonl
 ```
 
-The files must contain the ANCOM-BC2 output tables in JSON lines format.
+This structure can be represented with:
 
-More information about the required ANCOM-BC2 result files is provided in the [ANCOM-BC2](#ancom-bc2) section.
-
----
-
-## Summary of required files
-
-| File type | Format | Used for |
-|---|---|---|
-| Metadata table | `.tsv` or `.txt` | Sample information, groups, timepoints |
-| Feature table | `.qza` | Relative abundance calculation |
-| ANCOM-BC2 LFC table | `lfc.jsonl` | Log fold changes |
-| ANCOM-BC2 q-value table | `q.jsonl` | Adjusted p-values |
-| ANCOM-BC2 diff table | `diff.jsonl` | Significance status |
-
----
-
-## Minimal required directory structure
-
-```text
-project/
-├── metadata.tsv
-├── collapsed_tables/
-│   └── genus/
-│       └── by_treatment/
-│           └── baseline1/
-│               └── table_baseline1_all_genus.qza
-└── ancombc2_results/
-    └── genus/
-        └── by_treatment/
-            └── baseline1/
-                └── table_baseline1_all_genus_ANCOMBC2_exported/
-                    ├── lfc.jsonl
-                    ├── q.jsonl
-                    └── diff.jsonl
+```python
+ancom_base="/path/to/real_ANCOMB_BC2"
+ancom_template="{timepoint}_treat_ANCOMB_exported"
 ```
 
-
 ---
 
+## Quick Start
 
-## Heatmap Workflow
-
-
-This section explains how to create ANCOM-BC2 heatmaps with the package.
-
-The heatmap workflow is used to visualize exported ANCOM-BC2 results across multiple timepoints.  
-It combines:
-
-- ANCOM-BC2 log fold changes
-- ANCOM-BC2 significance information
-- mean relative abundance from QIIME2 feature tables
-- metadata-based subgroup filtering
-
----
-
-## Basic idea
-
-The heatmap needs three types of input files:
-
-| Input | Description |
-|---|---|
-| QIIME2 `.qza` feature tables | Used to calculate mean relative abundance |
-| exported ANCOM-BC2 result folders | Contain `lfc.jsonl`, `q.jsonl`, and `diff.jsonl` |
-| metadata file | Used for sample grouping, timepoints, and subset filtering |
-
-The final output is a heatmap showing significant ANCOM-BC2 log fold changes across timepoints.
-
----
-
-## 1. Import the package
+This example reproduces the simplified version 2.0 workflow.
 
 ```python
 import ancombc2_heatmaps as ah
-```
 
----
-
-## 2. Define the timepoints
-
-First, define the timepoints that should appear in the heatmap.
-
-```python
 timepoints = [
-    "baseline1",
-    "baseline2",
-    "baseline3",
-    "day1",
-    "day3",
-    "day7",
-    "day14",
+    "baseline1", "baseline2", "baseline3",
+    "day1", "day3", "day7", "day14",
 ]
-```
 
-The order in this list is also the order used in the heatmap.
+timepoint_map = {
+    "baseline_1": "baseline1",
+    "baseline_2": "baseline2",
+    "baseline_3": "baseline3",
+    "day_1_post": "day1",
+    "day_3_post": "day3",
+    "day_7_post": "day7",
+    "day_14_post": "day14",
+}
 
----
+config = ah.ANCOMConfig(
+    metadata_path="/path/to/metadata.tsv",
+    output_dir="/path/to/output",
 
-## 3. Create the heatmap configuration
+    table_base="/path/to/heatmaps_genus_by_timepoint",
+    ancom_base="/path/to/heatmaps_genus_by_timepoint/real_ANCOMB_BC2",
 
-The main configuration object is `HeatmapConfig`.
-
-It contains several smaller configuration blocks:
-
-| Config class | Purpose |
-|---|---|
-| `MetadataConfig` | Defines metadata columns and timepoint handling |
-| `ComparisonConfig` | Defines the ANCOM-BC2 comparison variable |
-| `PathConfig` | Defines input and output paths |
-| `PlotTextConfig` | Customizes titles and labels |
-| `HeatmapStyleConfig` | Customizes figure size, fonts, colors, and layout |
-| `TaxonomyConfig` | Customizes taxon label formatting |
-
-A minimal example:
-
-```python
-heatmap_config = ah.HeatmapConfig(
-    metadata=ah.MetadataConfig(
-        sample_col="sample_name",
-        timepoint_col="time_point",
-        comparison_col="description_of_treatment",
-        timepoints=timepoints,
-        timepoint_map={
-            "baseline_1": "baseline1",
-            "baseline_2": "baseline2",
-            "baseline_3": "baseline3",
-            "day_1_post": "day1",
-            "day_3_post": "day3",
-            "day_7_post": "day7",
-            "day_14_post": "day14",
-        },
-        allowed_values={
-            "description_of_treatment": ["sham", "irradiated"],
-        },
-    ),
-
-    comparison=ah.ComparisonConfig(
-        variable_name="description_of_treatment",
-    ),
-
-    paths=ah.PathConfig(
-        base_table_dir="/path/to/qza_tables",
-        base_ancom_dir="/path/to/exported_ancom_results",
-        metadata_path="/path/to/metadata.tsv",
-        output_dir="/path/to/output",
-
-        table_template="{timepoint}/table_{timepoint}_genus_ANCOM.qza",
-        ancom_template="{timepoint}_treat_ANCOMB_exported",
-    ),
-
-    split_after_timepoint="baseline3",
-)
-```
-
----
-
-## 4. MetadataConfig options
-
-`MetadataConfig` tells the package how to read and interpret the metadata.
-
-```python
-metadata=ah.MetadataConfig(
     sample_col="sample_name",
     timepoint_col="time_point",
-    comparison_col="description_of_treatment",
+    group_col="description_of_treatment",
+    subject_col=None,
+
     timepoints=timepoints,
-    timepoint_map={...},
-    allowed_values={...},
+    timepoint_map=timepoint_map,
+
+    allowed_values={
+        "description_of_treatment": ["sham", "irradiated"],
+    },
+
+    table_template="table_{timepoint}_genus_ANCOM.qza",
+    ancom_template="{timepoint}_treat_ANCOMB_exported",
+
+    variable_name="description_of_treatment",
+
+    split_after_timepoint="baseline3",
+
+    taxa=[
+        "g_Akkermansia",
+    ],
+)
+
+workflow = ah.ANCOMWorkflow(config)
+
+subset = ah.Subset(
+    label="",
+    title="All samples",
+    filters={},
 )
 ```
 
-### Options
+Before plotting, check whether all paths are resolved correctly:
 
-| Option | Description |
+```python
+workflow.check(subset)
+```
+
+Then create plots:
+
+```python
+workflow.heatmap(subset)
+
+workflow.trajectory("g_Akkermansia", subset)
+workflow.boxplot("g_Akkermansia", subset)
+```
+
+Because `g_Akkermansia` is already listed in `config.taxa`, you can also use:
+
+```python
+workflow.trajectories(subset)
+workflow.boxplots(subset)
+```
+
+---
+
+## Configuration
+
+The package uses one central config class:
+
+```python
+ah.ANCOMConfig(...)
+```
+
+Important fields:
+
+| Field | Meaning |
 |---|---|
-| `sample_col` | Column containing sample IDs |
-| `timepoint_col` | Column containing timepoint information |
-| `comparison_col` | Column used for the main comparison |
-| `timepoints` | Timepoints to include and their plotting order |
-| `timepoint_map` | Optional renaming of metadata timepoints |
-| `allowed_values` | Optional filtering of metadata values |
+| `metadata_path` | path to metadata file |
+| `output_dir` | directory for saved figures |
+| `sample_col` | metadata column containing sample IDs |
+| `timepoint_col` | metadata column containing timepoints |
+| `group_col` | metadata column used for comparison groups |
+| `subject_col` | optional mouse/subject ID column for individual lines |
+| `timepoints` | ordered list of timepoints to plot |
+| `timepoint_map` | optional mapping from metadata names to plot names |
+| `allowed_values` | optional metadata filtering before plotting |
+| `table_base` | base directory for QIIME2 tables |
+| `table_template` | filename or relative path template for QIIME2 tables |
+| `ancom_base` | base directory for ANCOM-BC2 export folders |
+| `ancom_template` | folder template for ANCOM-BC2 exports |
+| `variable_name` | ANCOM-BC2 variable name / effect prefix |
+| `taxa` | default taxa for `workflow.trajectories()` and `workflow.boxplots()` |
+
+Additional plotting options are grouped in `ah.PlotConfig`.
 
 Example:
 
 ```python
-allowed_values={
-    "description_of_treatment": ["sham", "irradiated"],
-}
+config = ah.ANCOMConfig(
+    ...,
+    plot=ah.PlotConfig(
+        save_png=False,
+        save_pdf=False,
+        show=True,
+        estimator="mean",
+        error_style="iqr",
+        show_significance=True,
+        merge_baselines=False,
+    ),
+)
 ```
-
-This means only samples with treatment `sham` or `irradiated` are used.
-
-This is usually only necessary if the metadata contains additional groups that should be excluded.
 
 ---
 
-## 5. ComparisonConfig options
+## Path Handling
 
-`ComparisonConfig` controls which ANCOM-BC2 effect column is used.
-
-```python
-comparison=ah.ComparisonConfig(
-    variable_name="description_of_treatment",
-)
-```
-
-The package searches for ANCOM-BC2 columns starting with:
-
-```text
-description_of_treatment::
-```
-
-For example:
-
-```text
-description_of_treatment::sham
-```
-
-### Options
-
-| Option | Description |
-|---|---|
-| `variable_name` | Metadata variable used in ANCOM-BC2 |
-| `positive_class` | Optional custom label for the positive group |
-| `negative_class` | Optional custom label for the reference group |
-| `effect_column` | Manually specify the exact ANCOM-BC2 effect column |
-| `invert_sign` | Manually invert the log fold change sign |
-
-Example with manual effect column:
-
-(In general you don't need to modify this manually.)
-
-```python
-comparison=ah.ComparisonConfig(
-    variable_name="description_of_treatment",
-    effect_column="description_of_treatment::sham",
-)
-```
-
-Example with custom labels:
-
-```python
-comparison=ah.ComparisonConfig(
-    variable_name="description_of_treatment",
-    positive_class="sham",
-    negative_class="irradiated",
-)
-```
-
-Example with sign inversion:
-
-```python
-comparison=ah.ComparisonConfig(
-    variable_name="description_of_treatment",
-    invert_sign=True,
-)
-```
-
-Use `invert_sign=True` only if you explicitly want to reverse the ANCOM-BC2 log fold change direction.
+The package supports two ways to define file paths.
 
 ---
 
-## 6. PathConfig options
+### 1. Template mode
 
-`PathConfig` defines where the package finds the input files and where it saves the output.
+Use this when your files follow a regular naming pattern.
 
 ```python
-paths=ah.PathConfig(
-    base_table_dir="/path/to/qza_tables",
-    base_ancom_dir="/path/to/exported_ancom_results",
-    metadata_path="/path/to/metadata.tsv",
-    output_dir="/path/to/output",
+config = ah.ANCOMConfig(
+    ...,
+    table_base="/path/to/tables",
+    ancom_base="/path/to/ancom_exports",
 
     table_template="{timepoint}/table_{timepoint}_{subset_label}.qza",
     ancom_template="{timepoint}/table_{timepoint}_{subset_label}_ANCOMB_exported",
 )
 ```
 
-### Required paths
+For example, for `timepoint="day1"` and `subset.label="WT_genus_ANCOM"`, this resolves to:
 
-| Option | Description |
-|---|---|
-| `base_table_dir` | Base folder containing QIIME2 `.qza` feature tables |
-| `base_ancom_dir` | Base folder containing exported ANCOM-BC2 result folders |
-| `metadata_path` | Path to metadata file |
-| `output_dir` | Folder where heatmaps are saved |
+```text
+/path/to/tables/day1/table_day1_WT_genus_ANCOM.qza
+/path/to/ancom_exports/day1/table_day1_WT_genus_ANCOM_ANCOMB_exported
+```
 
-### Template options
-
-| Option | Description |
-|---|---|
-| `table_template` | Relative path pattern for `.qza` tables |
-| `ancom_template` | Relative path pattern for ANCOM-BC2 export folders |
-| `lfc_filename` | Filename for log fold changes, default: `lfc.jsonl` |
-| `q_filename` | Filename for q-values, default: `q.jsonl` |
-| `diff_filename` | Filename for significance flags, default: `diff.jsonl` |
-
-The templates can use:
+Templates can use:
 
 ```text
 {timepoint}
 {subset_label}
-```
-
-Example:
-
-```python
-table_template="{timepoint}/table_{timepoint}_{subset_label}.qza"
-```
-
-For:
-
-```python
-timepoint = "day1"
-subset.label = "WT"
-```
-
-this becomes:
-
-```text
-day1/table_day1_WT.qza
+{variable_name}
 ```
 
 ---
 
-## 7. General HeatmapConfig options
+### 2. Fixed path mode
 
-These options are set directly inside `HeatmapConfig`.
+Use this when your filenames are irregular or when you want to specify every file manually.
 
 ```python
-heatmap_config = ah.HeatmapConfig(
+config = ah.ANCOMConfig(
     ...,
-    q_cutoff=0.05,
-    min_sig_cells_per_taxon=1,
-    split_after_timepoint="baseline3",
-    remove_empty_rows_after_masking=True,
-    cell_text_mode="relative_abundance",
-    lfc_decimals=2,
-)
-```
-
-### Options
-
-| Option | Description |
-|---|---|
-| `q_cutoff` | q-value threshold for significance |
-| `min_sig_cells_per_taxon` | Minimum number of significant cells required to keep a taxon |
-| `split_after_timepoint` | Draws a vertical line after a selected timepoint |
-| `remove_empty_rows_after_masking` | Removes taxa with no significant values after masking |
-| `cell_text_mode` | Controls text inside heatmap cells |
-| `lfc_decimals` | Number of decimals for LFC labels |
-
-### Cell text modes
-
-```python
-cell_text_mode="relative_abundance"
-```
-
-Options:
-
-| Value | Meaning |
-|---|---|
-| `"relative_abundance"` | Show mean relative abundance inside significant cells |
-| `"lfc"` | Show log fold change values inside significant cells |
-| `"none"` | Show no text inside cells |
-
-Example:
-
-```python
-heatmap_config = ah.HeatmapConfig(
-    ...,
-    cell_text_mode="lfc",
-    lfc_decimals=3,
-)
-```
-
----
-
-## 8. Styling options
-
-You can customize the appearance with `HeatmapStyleConfig`.
-
-```python
-style=ah.HeatmapStyleConfig(
-    title_fontsize=13,
-    axis_label_fontsize=11,
-    xtick_fontsize=8,
-    ytick_fontsize=7,
-    celltext_fontsize=8,
-
-    base_cell_height=0.25,
-    base_cell_width=0.78,
-    height_scale=6.0,
-
-    heatmap_cmap="RdBu_r",
-    missing_color="white",
-
-    highlight_taxa=[
-        "Akkermansia",
-        "Muribaculaceae",
-    ],
-)
-```
-
-### Common style options
-
-| Option | Description |
-|---|---|
-| `title_fontsize` | Title font size |
-| `axis_label_fontsize` | Axis label font size |
-| `xtick_fontsize` | X-axis label font size |
-| `ytick_fontsize` | Y-axis taxon label font size |
-| `celltext_fontsize` | Text size inside cells |
-| `base_cell_height` | Base height of each heatmap row |
-| `base_cell_width` | Base width of each heatmap column |
-| `height_scale` | Strength of row-height scaling |
-| `rowheight_ra_min` | Minimum relative abundance for row-height scaling |
-| `rowheight_ra_max` | Maximum relative abundance for row-height scaling |
-| `figure_min_height` | Minimum figure height |
-| `figure_max_height` | Maximum figure height |
-| `figure_min_width` | Minimum figure width |
-| `figure_max_width` | Maximum figure width |
-| `heatmap_cmap` | Matplotlib colormap |
-| `missing_color` | Color for non-significant or missing cells |
-| `edge_color` | Cell border color |
-| `split_line_color` | Color of the vertical split line |
-| `highlight_taxa` | Taxa names that should be highlighted in bold |
-
----
-
-## 9. Custom title and labels
-
-You can customize text with `PlotTextConfig`.
-
-```python
-text=ah.PlotTextConfig(
-    title_template=(
-        "ANCOM-BC2 log fold change ({positive_label} vs {negative_label})\n"
-        "{subset_title}"
-    ),
-    x_label="Timepoint",
-    y_label="Taxon",
-    colorbar_template=(
-        "ANCOM-BC2 log fold change\n"
-        "red = higher in {positive_label}\n"
-        "blue = higher in {negative_label}"
-    ),
-    top_axis_count_template="{positive_label}={positive_n} | {negative_label}={negative_n}",
-)
-```
-
-Available placeholders include:
-
-| Placeholder | Meaning |
-|---|---|
-| `{positive_label}` | Positive comparison group |
-| `{negative_label}` | Reference group |
-| `{subset_title}` | Title from the selected subset |
-| `{min_sig_cells}` | Minimum significant cells per taxon |
-| `{cell_text_description}` | Description of cell text mode |
-| `{positive_n}` | Number of samples in positive group |
-| `{negative_n}` | Number of samples in negative group |
-
----
-
-## 10. Create the plotter
-
-After defining the config, create the plotter:
-
-```python
-plotter = ah.ANCOMBC2HeatmapPlotter(
-    heatmap_config
-)
-```
-
-The plotter will use the config to find the required files and generate heatmaps.
-
----
-
-## 11. Define a subset
-
-A subset defines which samples are used.
-Please be aware that you only use subsets you have a individually calculatet ancom export for.
-
-```python
-subset = ah.SubsetSpec(
-    label="WT",
-    title="WT mice",
-    filters={
-        "mice_model": "WT",
+    table_paths={
+        "baseline1": "/path/to/baseline1_table.qza",
+        "day1": "/path/to/day1_table.qza",
+        "day3": "/path/to/day3_table.qza",
+    },
+    ancom_paths={
+        "baseline1": "/path/to/baseline1_ANCOMB_exported",
+        "day1": "/path/to/day1_ANCOMB_exported",
+        "day3": "/path/to/day3_ANCOMB_exported",
     },
 )
 ```
 
-### Subset options
+If `table_paths` is given, it overrides `table_base` and `table_template`.
 
-| Option | Description |
-|---|---|
-| `label` | Used in file paths and output filenames |
-| `title` | Used in the heatmap title |
-| `filters` | Metadata filters applied before plotting |
+If `ancom_paths` is given, it overrides `ancom_base` and `ancom_template`.
 
-Example with multiple filters:
+---
+
+## Heatmap Workflow
+
+Create one heatmap:
 
 ```python
-subset = ah.SubsetSpec(
-    label="WT_female",
-    title="WT female mice",
+workflow.heatmap(subset)
+```
+
+Disable saving:
+
+```python
+workflow.heatmap(
+    subset,
+    save_png=False,
+    save_pdf=False,
+    show=True,
+)
+```
+
+Create heatmaps for multiple subsets:
+
+```python
+subsets = [
+    ah.Subset(label="", title="All samples", filters={}),
+    ah.Subset(label="WT_genus_ANCOM", title="WT", filters={"mice_model": "WT"}),
+    ah.Subset(label="Apc_genus_ANCOM", title="Apc", filters={"mice_model": "Apc"}),
+]
+
+workflow.heatmaps(subsets)
+```
+
+The heatmap shows ANCOM-BC2 log fold changes across timepoints.
+
+By default:
+
+- only significant cells are colored
+- taxa are filtered by `min_sig_cells_per_taxon`
+- cell text shows mean relative abundance
+- row height is scaled by relative abundance
+- the top axis shows group sample counts per timepoint
+
+Relevant config options:
+
+```python
+config = ah.ANCOMConfig(
+    ...,
+    min_sig_cells_per_taxon=1,
+    split_after_timepoint="baseline3",
+    remove_empty_rows_after_masking=True,
+    plot=ah.PlotConfig(
+        cell_text_mode="relative_abundance",  # "relative_abundance", "lfc", or "none"
+        heatmap_cmap="RdBu_r",
+        highlight_taxa=["Akkermansia", "Muribaculaceae"],
+    ),
+)
+```
+
+---
+
+## Trajectory Workflow
+
+Plot one taxon:
+
+```python
+workflow.trajectory("g_Akkermansia", subset)
+```
+
+Plot all taxa listed in `config.taxa`:
+
+```python
+workflow.trajectories(subset)
+```
+
+Temporarily plot a different list of taxa:
+
+```python
+workflow.trajectories(
+    subset,
+    taxa=[
+        "g_Akkermansia",
+        "f_Muribaculaceae",
+        "p_Verrucomicrobiota",
+    ],
+)
+```
+
+Choose comparison levels manually:
+
+```python
+workflow.trajectory(
+    "g_Akkermansia",
+    subset,
+    comparison_levels=["sham", "irradiated"],
+)
+```
+
+Relevant plot settings:
+
+```python
+config = ah.ANCOMConfig(
+    ...,
+    plot=ah.PlotConfig(
+        estimator="mean",            # "mean" or "median"
+        error_style="iqr",           # "iqr" or "ci"
+        show_individual_lines=False,
+        show_significance=True,
+        y_label="relative abundance",
+    ),
+)
+```
+
+If `show_significance=True`, labels are added above the trajectory:
+
+```text
+*  = ANCOM significant
+ns = not significant
+```
+
+---
+
+## Boxplot Workflow
+
+Plot one taxon as grouped boxplots over time:
+
+```python
+workflow.boxplot("g_Akkermansia", subset)
+```
+
+Plot all taxa listed in `config.taxa`:
+
+```python
+workflow.boxplots(subset)
+```
+
+Disable the trend line:
+
+```python
+workflow.boxplot(
+    "g_Akkermansia",
+    subset,
+    show_trend=False,
+)
+```
+
+Change the polynomial degree of the trend line:
+
+```python
+workflow.boxplot(
+    "g_Akkermansia",
+    subset,
+    show_trend=True,
+    trend_order=3,
+)
+```
+
+Typical values:
+
+```text
+trend_order=1  linear trend
+trend_order=2  quadratic trend
+trend_order=3  cubic trend
+```
+
+For multiple taxa:
+
+```python
+workflow.boxplots(
+    subset,
+    show_trend=True,
+    trend_order=2,
+)
+```
+
+The boxplot workflow shows:
+
+- boxplots per timepoint and group
+- individual sample points
+- optional approximate polynomial trend line
+- optional ANCOM significance labels
+
+---
+
+## Subsets
+
+Subsets are defined with:
+
+```python
+ah.Subset(...)
+```
+
+A subset has:
+
+| Field | Meaning |
+|---|---|
+| `label` | used in file templates |
+| `title` | shown in plot titles |
+| `filters` | metadata filters applied before plotting |
+
+All samples:
+
+```python
+subset_all = ah.Subset(
+    label="",
+    title="All samples",
+    filters={},
+)
+```
+
+WT only:
+
+```python
+subset_wt = ah.Subset(
+    label="WT_genus_ANCOM",
+    title="WT",
+    filters={"mice_model": "WT"},
+)
+```
+
+Female WT only:
+
+```python
+subset_wt_female = ah.Subset(
+    label="WT_female_genus_ANCOM",
+    title="WT female",
     filters={
         "mice_model": "WT",
         "sex": "female",
@@ -743,530 +649,263 @@ subset = ah.SubsetSpec(
 )
 ```
 
-Example without filtering:
+Multiple accepted values are also possible:
 
 ```python
-subset = ah.SubsetSpec(
-    label="",
-    title="All samples",
-    filters={},
+subset_baseline_groups = ah.Subset(
+    label="WT_genus_ANCOM",
+    title="WT, both sexes",
+    filters={
+        "mice_model": "WT",
+        "sex": ["female", "male"],
+    },
 )
 ```
+
+Important: `subset.label` is also used to build file paths when the template contains `{subset_label}`.
 
 ---
 
-## 12. Generate one heatmap
+## Taxon Queries
+
+Taxa can be selected with short query strings.
+
+Examples:
 
 ```python
-plotter.plot_subset(
-    meta_df=plotter.load_metadata(),
-    subset=subset,
-)
+"g_Akkermansia"
+"f_Akkermansiaceae"
+"p_Verrucomicrobiota"
 ```
 
-This will:
+Supported prefixes:
 
-1. Load and filter metadata
-2. Load QIIME2 feature tables
-3. Calculate mean relative abundance
-4. Load exported ANCOM-BC2 results
-5. Mask non-significant cells
-6. Generate the heatmap
-7. Save the output files
-
----
-
-## 13. Control saving and display
-
-```python
-plotter.plot_subset(
-    meta_df=plotter.load_metadata(),
-    subset=subset,
-    save_png=True,
-    save_pdf=True,
-    show=True,
-)
-```
-
-### Options
-
-| Option | Description |
+| Prefix | Rank |
 |---|---|
-| `save_png` | Save heatmap as PNG |
-| `save_pdf` | Save heatmap as PDF |
-| `show` | Display the plot directly |
+| `g_` | genus |
+| `f_` | family |
+| `p_` | phylum |
+| `o_` | order |
+| `c_` | class |
+| `k_` | kingdom |
+| `d_` | domain |
 
-For scripts or batch jobs, use:
+You can also use the normalized full taxon label:
 
 ```python
-plotter.plot_subset(
-    meta_df=plotter.load_metadata(),
-    subset=subset,
-    save_png=True,
-    save_pdf=True,
-    show=False,
-)
+"p__Verrucomicrobiota; f__Akkermansiaceae; g__Akkermansia"
 ```
+
 
 ---
 
-## 14. Generate multiple heatmaps
+## ANCOM-BC2 Direction
 
-To generate multiple heatmaps in one run:
+The package uses the ANCOM-BC2 log fold change direction directly from the selected effect column.
 
-```python
-subsets = [
-    ah.SubsetSpec(
-        label="WT",
-        title="WT mice",
-        filters={
-            "mice_model": "WT",
-        },
-    ),
-
-    ah.SubsetSpec(
-        label="Apc",
-        title="Apc mice",
-        filters={
-            "mice_model": "Apc",
-        },
-    ),
-
-    ah.SubsetSpec(
-        label="WT_female",
-        title="WT female mice",
-        filters={
-            "mice_model": "WT",
-            "sex": "female",
-        },
-    ),
-]
-
-plotter.plot_all_subsets(
-    subsets=subsets,
-    save_png=True,
-    save_pdf=True,
-    show=False,
-)
-```
-
----
-
-
-
-## 15. Full minimal example
-
-```python
-import ancombc2_heatmaps as ah
-
-
-timepoints = [
-    "baseline1",
-    "baseline2",
-    "baseline3",
-    "day1",
-    "day3",
-    "day7",
-    "day14",
-]
-
-
-heatmap_config = ah.HeatmapConfig(
-    metadata=ah.MetadataConfig(
-        sample_col="sample_name",
-        timepoint_col="time_point",
-        comparison_col="description_of_treatment",
-        timepoints=timepoints,
-        timepoint_map={
-            "baseline_1": "baseline1",
-            "baseline_2": "baseline2",
-            "baseline_3": "baseline3",
-            "day_1_post": "day1",
-            "day_3_post": "day3",
-            "day_7_post": "day7",
-            "day_14_post": "day14",
-        },
-        allowed_values={
-            "description_of_treatment": ["sham", "irradiated"],
-        },
-    ),
-
-    comparison=ah.ComparisonConfig(
-        variable_name="description_of_treatment",
-    ),
-
-    paths=ah.PathConfig(
-        base_table_dir="/path/to/qza_tables",
-        base_ancom_dir="/path/to/exported_ancom_results",
-        metadata_path="/path/to/metadata.tsv",
-        output_dir="/path/to/output",
-
-        table_template="{timepoint}/table_{timepoint}_genus_ANCOM.qza",
-        ancom_template="{timepoint}_treat_ANCOMB_exported",
-    ),
-
-    q_cutoff=0.05,
-    min_sig_cells_per_taxon=1,
-    split_after_timepoint="baseline3",
-    cell_text_mode="relative_abundance",
-)
-
-
-plotter = ah.ANCOMBC2HeatmapPlotter(
-    heatmap_config
-)
-
-
-subset = ah.SubsetSpec(
-    label="",
-    title="All samples",
-    filters={},
-)
-
-
-plotter.plot_subset(
-    meta_df=plotter.load_metadata(),
-    subset=subset,
-    save_png=True,
-    save_pdf=True,
-    show=True,
-)
-```
-
----
-
-## 17. Interpreting the heatmap
-
-The heatmap shows ANCOM-BC2 log fold changes for significant taxa across timepoints.
-
-General interpretation:
-
-| Visual element | Meaning |
-|---|---|
-| Red cells | Higher abundance in the positive comparison group |
-| Blue cells | Higher abundance in the reference group |
-| White cells | Not significant or missing |
-| Cell numbers | Depending on `cell_text_mode`, relative abundance or LFC |
-| Row height | Scaled by mean relative abundance across significant cells |
-| Top labels | Sample counts per group and timepoint |
-| Vertical split line | Optional separation between baseline and later timepoints |
-
-The exact direction depends on the ANCOM-BC2 effect column.  
-For example, if the effect column is:
+Example effect column:
 
 ```text
 description_of_treatment::sham
 ```
 
-then positive log fold changes correspond to higher abundance in `sham`, unless `invert_sign=True` is used.
+This means:
 
+```text
+positive LFC = higher in sham
+negative LFC = lower in sham / higher in the reference group
+```
 
+The heatmap colorbar labels are inferred from the effect column and metadata where possible.
 
-# Trajectory Workflow
+You can set labels manually:
 
-The trajectory workflow is used to visualize taxon abundance changes across timepoints.
+```python
+config = ah.ANCOMConfig(
+    ...,
+    positive_class="sham",
+    negative_class="irradiated",
+)
+```
 
-Trajectory plots combine:
+If you explicitly want to reverse the LFC direction:
 
-- QIIME2 feature tables (`.qza`)
-- metadata
-- optional ANCOM-BC2 significance information
+```python
+config = ah.ANCOMConfig(
+    ...,
+    invert_sign=True,
+)
+```
 
-Supported features include:
-
-- mean or median trajectories
-- IQR or confidence intervals
-- optional individual mouse trajectories
-- optional ANCOM significance annotations
-- optional baseline merging
+Use `invert_sign=True` only if you are sure that you want to flip the ANCOM-BC2 LFC values.
 
 ---
 
-# 1. Import the package
+## Troubleshooting
+
+### 1. Check resolved paths
+
+Before plotting a new dataset, run:
+
+```python
+workflow.check(subset)
+```
+
+This returns a table with:
+
+```text
+timepoint
+table_path
+table_exists
+ancom_path
+ancom_exists
+```
+
+If `table_exists` or `ancom_exists` is `False`, your base paths or templates do not match your actual file structure.
+
+---
+
+### 2. No relative abundance data
+
+Message:
+
+```text
+[NO HEATMAP] No relative abundance data
+```
+
+Common causes:
+
+- QIIME2 table paths are wrong
+- metadata sample IDs do not match table sample IDs
+- timepoint names in metadata do not match `config.timepoints`
+- subset filters remove all samples
+
+Check metadata and table overlap:
+
+```python
+meta = workflow.data.filter_metadata(subset)
+rel = workflow.data.relative_abundance("baseline1", subset)
+
+metadata_samples = set(meta.loc[meta["time_point"] == "baseline1", "sample_name"])
+table_samples = set(rel.columns)
+
+len(metadata_samples & table_samples)
+```
+
+If the overlap is `0`, the sample names do not match.
+
+---
+
+### 3. Missing metadata columns
+
+Message:
+
+```text
+ValueError: Missing metadata columns: [...]
+```
+
+The column name in your config does not exist in the metadata file.
+
+---
+
+### 4. No LFC data found
+
+Message:
+
+```text
+[NO HEATMAP] No ANCOM LFC data
+```
+
+Common causes:
+
+- ANCOM export paths are wrong
+- `lfc.jsonl`, `q.jsonl` or `diff.jsonl` is missing
+- `variable_name` does not match the effect column prefix
+
+Check one export folder manually:
+
+```bash
+ls /path/to/ANCOMB_exported
+```
+
+Expected:
+
+```text
+lfc.jsonl
+q.jsonl
+diff.jsonl
+```
+
+If the ANCOM-BC2 column is for example:
+
+```text
+description_of_treatment::sham
+```
+
+then use:
+
+```python
+variable_name="description_of_treatment"
+```
+
+or specify exactly:
+
+```python
+effect_column="description_of_treatment::sham"
+```
+
+---
+
+
+## Minimal complete example
 
 ```python
 import ancombc2_heatmaps as ah
-```
 
----
-
-# 2. Define timepoints
-
-```python
 timepoints = [
-    "baseline1",
-    "baseline2",
-    "baseline3",
-    "day1",
-    "day3",
-    "day7",
-    "day14",
+    "baseline1", "baseline2", "baseline3",
+    "day1", "day3", "day7", "day14",
 ]
-```
 
----
-
-# 3. Create the trajectory configuration
-
-Trajectory plots use `TrajectoryConfig`.
-
-Example:
-
-```python
-trajectory_config = ah.TrajectoryConfig(
-
-    metadata=ah.TrajectoryMetadataConfig(
-
-        sample_col="sample_name",
-
-        timepoint_col="time_point",
-
-        mouse_col="host_subject_id",
-
-        comparison_col="description_of_treatment",
-
-        timepoint_order=timepoints,
-
-        timepoint_numeric_map={
-
-            "baseline_1": -7,
-            "baseline_2": -4,
-            "baseline_3": -1,
-
-            "day_1_post": 1,
-            "day_3_post": 3,
-            "day_7_post": 7,
-            "day_14_post": 14,
-
-            "baseline1": -7,
-            "baseline2": -4,
-            "baseline3": -1,
-
-            "day1": 1,
-            "day3": 3,
-            "day7": 7,
-            "day14": 14,
-        },
-
-        timepoint_label_map={
-            -7: "baseline1",
-            -4: "baseline2",
-            -1: "baseline3",
-            1: "day1",
-            3: "day3",
-            7: "day7",
-            14: "day14",
-        },
-    ),
-
-    paths=ah.TrajectoryPathConfig(
-
-        metadata_path="/path/to/metadata.tsv",
-
-        table_base="/path/to/qza_tables",
-
-        ancom_base="/path/to/ancom_exports",
-
-        table_template=(
-            "{timepoint}/table_{timepoint}_{subset_label}.qza"
-        ),
-
-        ancom_template=(
-            "{timepoint}/table_{timepoint}_{subset_label}_treat_ANCOMB_exported"
-        ),
-    ),
-
-    plot=ah.TrajectoryPlotConfig(
-
-        estimator="mean",
-
-        error_style="iqr",
-
-        show_individual_lines=True,
-
-        merge_baselines=False,
-
-        show_significance=True,
-
-        figsize=(12, 8),
-    ),
-)
-```
-
----
-
-# 4. Create the plotter
-
-```python
-plotter = ah.TaxonTrajectoryPlotter(
-    trajectory_config
-)
-```
-
----
-
-# 5. Create a subset
-
-Example:
-
-```python
-subset = ah.SubsetSpec(
-    label="WT_genus_ANCOM",
-
-    title="WT | sham vs irradiated",
-
-    filters={
-        "mice_model": "WT",
-    },
-)
-```
-
----
-
-# 6. Plot a trajectory
-
-```python
-plotter.plot_taxon(
-
-    taxon_query="g_Akkermansia",
-
-    subset=subset,
-
-    comparison_levels=[
-        "sham",
-        "irradiated",
-    ],
-)
-```
-
----
-
-# 7. Fixed paths
-
-The workflow also supports manually defined paths.
-
-Example:
-
-```python
-paths=ah.TrajectoryPathConfig(
-
+config = ah.ANCOMConfig(
     metadata_path="/path/to/metadata.tsv",
+    output_dir="/path/to/output",
 
-    table_paths={
+    table_base="/path/to/tables",
+    ancom_base="/path/to/ancom",
 
-        "baseline1":
-            "/path/to/table_baseline1.qza",
+    sample_col="sample_name",
+    timepoint_col="time_point",
+    group_col="description_of_treatment",
+    subject_col=None,
 
-        "baseline2":
-            "/path/to/table_baseline2.qza",
-    },
+    timepoints=timepoints,
 
-    ancom_paths={
+    table_template="table_{timepoint}_genus_ANCOM.qza",
+    ancom_template="{timepoint}_treat_ANCOMB_exported",
 
-        "baseline1":
-            "/path/to/baseline1_ANCOMB_exported",
+    variable_name="description_of_treatment",
 
-        "baseline2":
-            "/path/to/baseline2_ANCOMB_exported",
-    },
+    taxa=["g_Akkermansia"],
+
+    plot=ah.PlotConfig(
+        save_png=False,
+        save_pdf=False,
+        show=True,
+    ),
 )
-```
 
----
+workflow = ah.ANCOMWorkflow(config)
 
-# 8. Taxon queries
-
-Supported query formats:
-
-## Genus
-
-```python
-taxon_query="g_Akkermansia"
-```
-
-## Family
-
-```python
-taxon_query="f_Akkermansiaceae"
-```
-
-## Phylum
-
-```python
-taxon_query="p_Verrucomicrobiota"
-```
-
-## Exact normalized label
-
-```python
-taxon_query=(
-    "p_Verrucomicrobiota; "
-    "f_Akkermansiaceae; "
-    "g_Akkermansia"
+subset = ah.Subset(
+    label="",
+    title="All samples",
+    filters={},
 )
+
+workflow.check(subset)
+
+workflow.heatmap(subset)
+workflow.trajectories(subset)
+workflow.boxplots(subset)
 ```
-
----
-
-# 9. Important plot options
-
-| Option | Description |
-|---|---|
-| `estimator="mean"` | Plot group means |
-| `estimator="median"` | Plot group medians |
-| `error_style="iqr"` | Interquartile range |
-| `error_style="ci"` | Bootstrap confidence interval |
-| `show_individual_lines=True` | Show one trajectory per mouse |
-| `merge_baselines=True` | Merge baseline timepoints |
-| `show_significance=True` | Show ANCOM significance labels |
-| `y_lim="auto_fix"` | Automatic y-axis scaling |
-
----
-
-# 10. Using PlotWorkflow
-
-You can combine heatmap and trajectory plotting:
-
-```python
-workflow = ah.PlotWorkflow(
-    heatmap_config=heatmap_config,
-    trajectory_config=trajectory_config,
-)
-```
-
-Then plot trajectories via:
-
-```python
-workflow.plot_trajectory(
-
-    taxon_query="g_Akkermansia",
-
-    subset=subset,
-
-    comparison_levels=[
-        "sham",
-        "irradiated",
-    ],
-)
-```
-
----
-
-# 11. Interpretation
-
-Trajectory plots visualize abundance changes across timepoints.
-
-| Visual element | Meaning |
-|---|---|
-| Colored lines | Group trajectories |
-| Points | Group mean or median |
-| Error intervals | IQR or confidence interval |
-| Background lines | Individual mouse trajectories |
-| `*` | ANCOM significant |
-| `ns` | Not significant |
-
-
-
-## ANCOM-BC2
-
-
