@@ -31,9 +31,7 @@ It supports:
 - ANCOM-BC2 log fold change heatmaps
 - taxon trajectory plots over time
 - boxplot trajectory plots with sample points
-- optional ANCOM significance labels for trajectory plots
-- template-based or fully explicit file paths
-- metadata-based subsets, for example WT only, Apc only, male only, female only, or all samples
+- metadata-based subsets
 
 The package is designed for QIIME2-based microbiome workflows where each timepoint has:
 
