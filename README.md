@@ -17,6 +17,7 @@ Reusable plotting utilities for ANCOM-BC2 log fold change heatmaps, taxon trajec
 - [Taxon Queries](#taxon-queries)
 - [ANCOM-BC2 Direction](#ancom-bc2-direction)
 - [Troubleshooting](#troubleshooting)
+- [Minimal complete example](#minimal-complete-example)
 
 
 ---
