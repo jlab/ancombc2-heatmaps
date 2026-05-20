@@ -44,6 +44,9 @@ The package is designed for QIIME2-based microbiome workflows where each timepoi
    - `diff.jsonl`
 
 ---
+<img width="1556" height="1384" alt="taxa_Apc" src="https://github.com/user-attachments/assets/3b576f00-6870-4459-a755-182968df4d94" />
+
+---
 
 ## Installation
 
@@ -538,6 +541,9 @@ ns = not significant
 ```
 
 ---
+<img width="1166" height="766" alt="grafik" src="https://github.com/user-attachments/assets/6c68b63e-d9e5-478b-be2d-ca24a6573b17" />
+
+---
 
 ## Boxplot Workflow
 
@@ -598,6 +604,9 @@ The boxplot workflow shows:
 - individual sample points
 - optional approximate polynomial trend line
 - optional ANCOM significance labels
+
+---
+<img width="1166" height="766" alt="grafik" src="https://github.com/user-attachments/assets/f431cb66-ea8f-4290-b878-0bf5ffcbe279" />
 
 ---
 
