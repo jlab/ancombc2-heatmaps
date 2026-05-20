@@ -307,7 +307,7 @@ class ANCOMData:
             out["lfc"] = -out["lfc"]
 
         out["q"] = pd.to_numeric(out["q"], errors="coerce")
-        out["significant"] = (out["q"] < cfg.q_cutoff) & (out["diff"] == True)
+        out["significant"] = (out["q"] < cfg.q_cutoff) & out["diff"]
         out["timepoint"] = timepoint
         out["effect_column"] = effect_col
 
