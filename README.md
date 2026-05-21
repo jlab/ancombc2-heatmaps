@@ -41,7 +41,7 @@ The package is designed for QIIME2-based microbiome workflows where each timepoi
    - `diff.jsonl`
 
 ---
-<img width="1556" height="1384" alt="taxa_Apc" src="https://github.com/user-attachments/assets/3b576f00-6870-4459-a755-182968df4d94" />
+<img width="1127" height="1127" alt="grafik" src="https://github.com/user-attachments/assets/866a5592-3334-408a-9873-31eee1e7df3d" />
 
 ---
 
