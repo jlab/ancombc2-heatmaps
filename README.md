@@ -864,6 +864,29 @@ effect_column="description_of_treatment::sham"
 
 ---
 
+### 5. Suppress seaborn FutureWarnings
+
+Depending on the pandas/seaborn versions in your environment, seaborn may print `FutureWarning` messages during plotting, for example:
+
+```text
+FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version.
+```
+
+This warning comes from seaborn/pandas compatibility and does not usually affect the generated figures.
+
+To hide this warning in a notebook, add this at the top of the notebook before creating plots:
+
+```python
+import warnings
+
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    module="seaborn",
+)
+```
+
+---
 
 ## Minimal complete example
 
