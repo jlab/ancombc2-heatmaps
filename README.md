@@ -868,9 +868,8 @@ effect_column="description_of_treatment::sham"
 
 Depending on the pandas/seaborn versions in your environment, seaborn may print `FutureWarning` messages during plotting, for example:
 
-```text
-FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version.
-```
+> [!WARNING]
+> `FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version.`
 
 This warning comes from seaborn/pandas compatibility and does not usually affect the generated figures.
 
