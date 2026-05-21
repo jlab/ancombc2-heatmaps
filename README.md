@@ -181,6 +181,7 @@ table_base="/path/to/heatmaps_genus_by_timepoint"
 table_template="table_{timepoint}_genus_ANCOM.qza"
 ```
 To learn more about setting upp the correct paths you should look at [Path Handling](#path-handling).
+
 ---
 
 ## 3. Exported ANCOM-BC2 result files
@@ -217,6 +218,8 @@ This structure can be represented with:
 ancom_base="/path/to/real_ANCOMB_BC2"
 ancom_template="{timepoint}_treat_ANCOMB_exported"
 ```
+To learn more about setting upp the correct paths you should look at [Path Handling](#path-handling).
+
 
 ---
 
