@@ -222,8 +222,6 @@ ancom_template="{timepoint}_treat_ANCOMB_exported"
 
 ## Quick Start
 
-This example reproduces the simplified version 2.0 workflow.
-
 ```python
 import ancombc2_heatmaps as ah
 
