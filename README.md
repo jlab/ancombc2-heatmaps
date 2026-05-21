@@ -180,7 +180,7 @@ This structure can be represented with:
 table_base="/path/to/heatmaps_genus_by_timepoint"
 table_template="table_{timepoint}_genus_ANCOM.qza"
 ```
-
+To learn more about setting upp the correct paths you should look at [Path Handling](#path-handling).
 ---
 
 ## 3. Exported ANCOM-BC2 result files
