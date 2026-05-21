@@ -12,7 +12,7 @@ Reusable plotting utilities for ANCOM-BC2 log fold change heatmaps, taxon trajec
 - [Path Handling](#path-handling)
 - [Heatmap Workflow](#heatmap-workflow)
 - [Trajectory Workflow](#trajectory-workflow)
-- [Boxplot Workflow](#boxplot-workflow)
+- [Boxplot Trajectory Workflow](#boxplot-trajectory-workflow)
 - [Subsets](#subsets)
 - [Taxon Queries](#taxon-queries)
 - [ANCOM-BC2 Direction](#ancom-bc2-direction)
@@ -543,7 +543,7 @@ ns = not significant
 
 ---
 
-## Boxplot Workflow
+## Boxplot Trajectory Workflow
 
 Plot one taxon as grouped boxplots over time:
 
