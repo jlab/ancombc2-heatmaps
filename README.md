@@ -11,6 +11,7 @@ Reusable plotting utilities for ANCOM-BC2 log fold change heatmaps, taxon trajec
 - [Configuration](#configuration)
 - [Path Handling](#path-handling)
 - [Heatmap Workflow](#heatmap-workflow)
+- [Significance Filtering](#significance-filtering)
 - [Trajectory Workflow](#trajectory-workflow)
 - [Boxplot Trajectory Workflow](#boxplot-trajectory-workflow)
 - [Subsets](#subsets)
@@ -18,7 +19,6 @@ Reusable plotting utilities for ANCOM-BC2 log fold change heatmaps, taxon trajec
 - [ANCOM-BC2 Direction](#ancom-bc2-direction)
 - [Troubleshooting](#troubleshooting)
 - [Minimal complete example](#minimal-complete-example)
-
 
 ---
 
@@ -37,10 +37,12 @@ The package is designed for QIIME2-based microbiome workflows where each timepoi
 1. a QIIME2 feature table (`.qza`)
 2. an exported ANCOM-BC2 result directory containing:
    - `lfc.jsonl`
+   - `p.jsonl`
    - `q.jsonl`
    - `diff.jsonl`
 
 ---
+
 <img width="1127" height="1127" alt="grafik" src="https://github.com/user-attachments/assets/866a5592-3334-408a-9873-31eee1e7df3d" />
 
 ---
@@ -52,7 +54,6 @@ Install the package from GitHub:
 ```bash
 pip install git+ssh://git@github.com/jlab/ancombc2-heatmaps.git
 ```
-
 
 The package requires QIIME2 because `.qza` feature tables are loaded through the QIIME2 API.
 
@@ -103,7 +104,7 @@ The package expects three main input types:
 |---|---|---|
 | Metadata table | `.tsv`, `.txt` or `.csv` | sample information, groups, timepoints and subsets |
 | QIIME2 feature tables | `.qza` | relative abundance calculation |
-| ANCOM-BC2 export folders | folder with `lfc.jsonl`, `q.jsonl`, `diff.jsonl` | log fold changes and significance |
+| ANCOM-BC2 export folders | folder with `lfc.jsonl`, `p.jsonl`, `q.jsonl`, `diff.jsonl` | log fold changes and significance |
 
 ---
 
@@ -180,6 +181,7 @@ This structure can be represented with:
 table_base="/path/to/heatmaps_genus_by_timepoint"
 table_template="table_{timepoint}_genus_ANCOM.qza"
 ```
+
 To learn more about setting up the correct paths you should look at [Path Handling](#path-handling).
 
 ---
@@ -190,9 +192,19 @@ Each exported ANCOM-BC2 result folder must contain:
 
 ```text
 lfc.jsonl
+p.jsonl
 q.jsonl
 diff.jsonl
 ```
+
+The package uses:
+
+| File | Used for |
+|---|---|
+| `lfc.jsonl` | ANCOM-BC2 log fold changes |
+| `p.jsonl` | optional unadjusted p-value filtering |
+| `q.jsonl` | FDR-adjusted q-value filtering |
+| `diff.jsonl` | optional ANCOM-BC2 differential-abundance flag |
 
 Example:
 
@@ -200,14 +212,17 @@ Example:
 real_ANCOMB_BC2/
 ├── baseline1_treat_ANCOMB_exported/
 │   ├── lfc.jsonl
+│   ├── p.jsonl
 │   ├── q.jsonl
 │   └── diff.jsonl
 ├── baseline2_treat_ANCOMB_exported/
 │   ├── lfc.jsonl
+│   ├── p.jsonl
 │   ├── q.jsonl
 │   └── diff.jsonl
 └── day1_treat_ANCOMB_exported/
     ├── lfc.jsonl
+    ├── p.jsonl
     ├── q.jsonl
     └── diff.jsonl
 ```
@@ -218,8 +233,8 @@ This structure can be represented with:
 ancom_base="/path/to/real_ANCOMB_BC2"
 ancom_template="{timepoint}_treat_ANCOMB_exported"
 ```
-To learn more about setting up the correct paths you should look at [Path Handling](#path-handling).
 
+To learn more about setting up the correct paths you should look at [Path Handling](#path-handling).
 
 ---
 
@@ -266,6 +281,10 @@ config = ah.ANCOMConfig(
     ancom_template="{timepoint}_treat_ANCOMB_exported",
 
     variable_name="description_of_treatment",
+
+    significance_metric="q",
+    q_cutoff=0.05,
+    require_diff_for_significance=False,
 
     split_after_timepoint="baseline3",
 
@@ -327,12 +346,30 @@ Important fields:
 | `subject_col` | optional mouse/subject ID column for individual lines |
 | `timepoints` | ordered list of timepoints to plot |
 | `timepoint_map` | optional mapping from metadata names to plot names |
+| `timepoint_numeric_map` | optional mapping from timepoint labels to numeric values |
+| `timepoint_label_map` | optional mapping from numeric timepoints to x-axis labels |
 | `allowed_values` | optional metadata filtering before plotting |
 | `table_base` | base directory for QIIME2 tables |
 | `table_template` | filename or relative path template for QIIME2 tables |
 | `ancom_base` | base directory for ANCOM-BC2 export folders |
 | `ancom_template` | folder template for ANCOM-BC2 exports |
+| `table_paths` | optional explicit paths for QIIME2 feature tables |
+| `ancom_paths` | optional explicit paths for ANCOM-BC2 export folders |
+| `lfc_filename` | filename of the LFC export, default: `lfc.jsonl` |
+| `p_filename` | filename of the unadjusted p-value export, default: `p.jsonl` |
+| `q_filename` | filename of the FDR-adjusted q-value export, default: `q.jsonl` |
+| `diff_filename` | filename of the ANCOM-BC2 differential-abundance flag export, default: `diff.jsonl` |
 | `variable_name` | ANCOM-BC2 variable name / effect prefix |
+| `effect_column` | exact ANCOM-BC2 effect column if automatic detection is ambiguous |
+| `positive_class` | manual label for the positive LFC direction |
+| `negative_class` | manual label for the negative/reference LFC direction |
+| `invert_sign` | reverses the LFC sign if set to `True` |
+| `significance_metric` | significance file used for heatmap filtering: `"q"` or `"p"` |
+| `q_cutoff` | cutoff used for the selected significance metric, default: `0.05` |
+| `require_diff_for_significance` | whether `diff == True` is additionally required |
+| `min_sig_cells_per_taxon` | minimum number of significant cells required to keep a taxon in the heatmap |
+| `split_after_timepoint` | optional vertical separator after a selected timepoint |
+| `remove_empty_rows_after_masking` | remove taxa without plottable significant cells |
 | `taxa` | default taxa for `workflow.trajectories()` and `workflow.boxplots()` |
 
 Additional plotting options are grouped in `ah.PlotConfig`.
@@ -342,6 +379,9 @@ Example:
 ```python
 config = ah.ANCOMConfig(
     ...,
+    significance_metric="q",
+    q_cutoff=0.05,
+    require_diff_for_significance=False,
     plot=ah.PlotConfig(
         save_png=False,
         save_pdf=False,
@@ -455,7 +495,7 @@ The heatmap shows ANCOM-BC2 log fold changes across timepoints.
 
 By default:
 
-- only significant cells are colored
+- only cells passing the selected significance filter are colored
 - taxa are filtered by `min_sig_cells_per_taxon`
 - cell text shows mean relative abundance
 - row height is scaled by relative abundance
@@ -466,6 +506,9 @@ Relevant config options:
 ```python
 config = ah.ANCOMConfig(
     ...,
+    significance_metric="q",
+    q_cutoff=0.05,
+    require_diff_for_significance=False,
     min_sig_cells_per_taxon=1,
     split_after_timepoint="baseline3",
     remove_empty_rows_after_masking=True,
@@ -476,6 +519,156 @@ config = ah.ANCOMConfig(
     ),
 )
 ```
+
+### Vertical separator after a baseline
+
+Use `split_after_timepoint` to draw a vertical line after a selected timepoint:
+
+```python
+config = ah.ANCOMConfig(
+    ...,
+    split_after_timepoint="baseline3",
+)
+```
+
+For example, if your heatmap timepoints are:
+
+```python
+timepoints = ["baseline1", "day 1", "day 3", "day 7"]
+```
+
+you can draw the separator after `baseline1` with:
+
+```python
+split_after_timepoint="baseline1"
+```
+
+---
+
+## Significance Filtering
+
+Heatmap cells are filtered using ANCOM-BC2 significance values.
+
+The package supports two significance metrics:
+
+| Option | File used | Meaning |
+|---|---|---|
+| `significance_metric="q"` | `q.jsonl` | FDR-adjusted q-values |
+| `significance_metric="p"` | `p.jsonl` | unadjusted p-values |
+
+The cutoff is set with:
+
+```python
+q_cutoff=0.05
+```
+
+The name `q_cutoff` is kept for backwards compatibility. It is used as the cutoff for whichever significance metric is selected.
+
+---
+
+### Recommended q-value filtering
+
+For final interpretation, FDR-adjusted q-values are recommended:
+
+```python
+config = ah.ANCOMConfig(
+    ...,
+    significance_metric="q",
+    q_cutoff=0.05,
+    require_diff_for_significance=False,
+)
+```
+
+This displays heatmap cells where:
+
+```text
+q < 0.05
+```
+
+The q-values are read from:
+
+```text
+q.jsonl
+```
+
+---
+
+### Exploratory p-value filtering
+
+For exploratory plots, unadjusted p-values can be used:
+
+```python
+config = ah.ANCOMConfig(
+    ...,
+    significance_metric="p",
+    q_cutoff=0.05,
+    require_diff_for_significance=False,
+)
+```
+
+This displays heatmap cells where:
+
+```text
+p < 0.05
+```
+
+The p-values are read from:
+
+```text
+p.jsonl
+```
+
+When using:
+
+```python
+significance_metric="p"
+```
+
+the package raises a warning because unadjusted p-values are not corrected for multiple testing and may increase the number of false positives.
+
+Use this option for exploratory visualization only.
+
+---
+
+### Optional use of `diff.jsonl`
+
+ANCOM-BC2 also exports `diff.jsonl`, which contains a `True`/`False` flag for differential abundance.
+
+If you want a stricter filter, require both the selected significance value and `diff == True`:
+
+```python
+config = ah.ANCOMConfig(
+    ...,
+    significance_metric="q",
+    q_cutoff=0.05,
+    require_diff_for_significance=True,
+)
+```
+
+This displays heatmap cells where:
+
+```text
+q < 0.05 and diff == True
+```
+
+For unadjusted p-values, this stricter version would be:
+
+```python
+config = ah.ANCOMConfig(
+    ...,
+    significance_metric="p",
+    q_cutoff=0.05,
+    require_diff_for_significance=True,
+)
+```
+
+which displays cells where:
+
+```text
+p < 0.05 and diff == True
+```
+
+For final interpretation, FDR-adjusted q-values are recommended. Unadjusted p-values should be clearly marked as exploratory.
 
 ---
 
@@ -538,7 +731,16 @@ If `show_significance=True`, labels are added above the trajectory:
 ns = not significant
 ```
 
+The significance labels use the same significance filtering settings as the heatmap, for example:
+
+```python
+significance_metric="q"
+q_cutoff=0.05
+require_diff_for_significance=False
+```
+
 ---
+
 <img width="1166" height="766" alt="grafik" src="https://github.com/user-attachments/assets/6c68b63e-d9e5-478b-be2d-ca24a6573b17" />
 
 ---
@@ -603,7 +805,10 @@ The boxplot workflow shows:
 - optional approximate polynomial trend line
 - optional ANCOM significance labels
 
+The significance labels use the same significance filtering settings as the heatmap.
+
 ---
+
 <img width="1166" height="766" alt="grafik" src="https://github.com/user-attachments/assets/f431cb66-ea8f-4290-b878-0bf5ffcbe279" />
 
 ---
@@ -703,7 +908,6 @@ You can also use the normalized full taxon label:
 ```python
 "p__Verrucomicrobiota; f__Akkermansiaceae; g__Akkermansia"
 ```
-
 
 ---
 
@@ -827,7 +1031,7 @@ Message:
 Common causes:
 
 - ANCOM export paths are wrong
-- `lfc.jsonl`, `q.jsonl` or `diff.jsonl` is missing
+- `lfc.jsonl`, `p.jsonl`, `q.jsonl` or `diff.jsonl` is missing
 - `variable_name` does not match the effect column prefix
 
 Check one export folder manually:
@@ -840,6 +1044,7 @@ Expected:
 
 ```text
 lfc.jsonl
+p.jsonl
 q.jsonl
 diff.jsonl
 ```
@@ -864,7 +1069,42 @@ effect_column="description_of_treatment::sham"
 
 ---
 
-### 5. Suppress seaborn FutureWarnings
+### 5. No taxa after significance filter
+
+Message:
+
+```text
+[NO HEATMAP] No taxa after significance filter
+```
+
+Common causes:
+
+- no taxon passes the selected significance filter
+- `significance_metric` is set to `"q"` but no q-values are below the cutoff
+- `require_diff_for_significance=True` removes taxa where `diff == False`
+- `effect_column` points to the wrong ANCOM-BC2 effect
+
+For a less strict q-value filter, use:
+
+```python
+significance_metric="q"
+q_cutoff=0.05
+require_diff_for_significance=False
+```
+
+For exploratory unadjusted p-value plots, use:
+
+```python
+significance_metric="p"
+q_cutoff=0.05
+require_diff_for_significance=False
+```
+
+Unadjusted p-values are not corrected for multiple testing and should be used for exploratory visualization only.
+
+---
+
+### 6. Suppress seaborn FutureWarnings
 
 Depending on the pandas/seaborn versions in your environment, seaborn may print `FutureWarning` messages during plotting, for example:
 
@@ -915,6 +1155,10 @@ config = ah.ANCOMConfig(
     ancom_template="{timepoint}_treat_ANCOMB_exported",
 
     variable_name="description_of_treatment",
+
+    significance_metric="q",
+    q_cutoff=0.05,
+    require_diff_for_significance=False,
 
     taxa=["g_Akkermansia"],
 
