@@ -28,6 +28,21 @@ def load_qza_table_as_df(path: str) -> pd.DataFrame:
     return df
 
 
+def read_ancom_jsonl(path: str) -> pd.DataFrame:
+    """
+    Read a QIIME2 ANCOM-BC2 JSONL export table.
+
+    QIIME2 JSONL exports can contain one metadata/header row before the real data.
+    This function removes rows without a valid taxon entry.
+    """
+    df = pd.read_json(path, lines=True)
+
+    if "taxon" in df.columns:
+        df = df[df["taxon"].notna()].copy()
+
+    return df
+
+
 class ANCOMData:
     def __init__(self, config: ANCOMConfig):
         self.config = config
@@ -175,7 +190,10 @@ class ANCOMData:
 
         return rel.copy()
 
-    def mean_relative_abundance(self, subset: Subset) -> Tuple[pd.DataFrame, Dict[str, Dict[str, int]]]:
+    def mean_relative_abundance(
+        self,
+        subset: Subset,
+    ) -> Tuple[pd.DataFrame, Dict[str, Dict[str, int]]]:
         cfg = self.config
         meta = self.filter_metadata(subset)
 
@@ -259,7 +277,45 @@ class ANCOMData:
 
         return positive, negative
 
-    def read_ancom_timepoint(self, timepoint: str, subset: Subset) -> Optional[pd.DataFrame]:
+    def _significance_filename(self) -> str:
+        cfg = self.config
+
+        if cfg.significance_metric == "q":
+            return cfg.q_filename
+
+        if cfg.significance_metric == "p":
+            return cfg.p_filename
+
+        raise ValueError(
+            "significance_metric must be either 'q' or 'p'. "
+            f"Got: {cfg.significance_metric}"
+        )
+
+    def _require_diff_for_significance(self) -> bool:
+        cfg = self.config
+
+        if cfg.require_diff_for_significance is not None:
+            return bool(cfg.require_diff_for_significance)
+
+        # Default behavior:
+        # - q-values: require ANCOM-BC2 diff == True
+        # - p-values: only use unadjusted p < cutoff
+        if cfg.significance_metric == "q":
+            return True
+
+        if cfg.significance_metric == "p":
+            return False
+
+        raise ValueError(
+            "significance_metric must be either 'q' or 'p'. "
+            f"Got: {cfg.significance_metric}"
+        )
+
+    def read_ancom_timepoint(
+        self,
+        timepoint: str,
+        subset: Subset,
+    ) -> Optional[pd.DataFrame]:
         cfg = self.config
         export_dir = self.ancom_path(timepoint, subset)
 
@@ -267,35 +323,54 @@ class ANCOMData:
             return None
 
         lfc_path = os.path.join(export_dir, cfg.lfc_filename)
-        q_path = os.path.join(export_dir, cfg.q_filename)
+        sig_path = os.path.join(export_dir, self._significance_filename())
         diff_path = os.path.join(export_dir, cfg.diff_filename)
 
-        if not (os.path.exists(lfc_path) and os.path.exists(q_path) and os.path.exists(diff_path)):
+        if not (
+            os.path.exists(lfc_path)
+            and os.path.exists(sig_path)
+            and os.path.exists(diff_path)
+        ):
             return None
 
-        lfc = pd.read_json(lfc_path, lines=True)
-        q = pd.read_json(q_path, lines=True)
-        diff = pd.read_json(diff_path, lines=True)
+        lfc = read_ancom_jsonl(lfc_path)
+        sig = read_ancom_jsonl(sig_path)
+        diff = read_ancom_jsonl(diff_path)
 
         tax_col_lfc = "taxon" if "taxon" in lfc.columns else lfc.columns[0]
-        tax_col_q = "taxon" if "taxon" in q.columns else q.columns[0]
+        tax_col_sig = "taxon" if "taxon" in sig.columns else sig.columns[0]
         tax_col_diff = "taxon" if "taxon" in diff.columns else diff.columns[0]
 
         effect_col = self.detect_effect_column(lfc)
 
-        if effect_col not in q.columns or effect_col not in diff.columns:
-            raise ValueError(f"Effect column '{effect_col}' missing in q/diff files for {export_dir}")
+        if effect_col not in sig.columns or effect_col not in diff.columns:
+            raise ValueError(
+                f"Effect column '{effect_col}' missing in "
+                f"{cfg.significance_metric}/diff files for {export_dir}"
+            )
+
+        sig_value_name = cfg.significance_metric
 
         out = (
             lfc[[tax_col_lfc, effect_col]]
             .rename(columns={tax_col_lfc: "taxon_raw", effect_col: "lfc_raw"})
             .merge(
-                q[[tax_col_q, effect_col]].rename(columns={tax_col_q: "taxon_raw", effect_col: "q"}),
+                sig[[tax_col_sig, effect_col]].rename(
+                    columns={
+                        tax_col_sig: "taxon_raw",
+                        effect_col: sig_value_name,
+                    }
+                ),
                 on="taxon_raw",
                 how="inner",
             )
             .merge(
-                diff[[tax_col_diff, effect_col]].rename(columns={tax_col_diff: "taxon_raw", effect_col: "diff"}),
+                diff[[tax_col_diff, effect_col]].rename(
+                    columns={
+                        tax_col_diff: "taxon_raw",
+                        effect_col: "diff",
+                    }
+                ),
                 on="taxon_raw",
                 how="inner",
             )
@@ -303,17 +378,38 @@ class ANCOMData:
 
         out["taxon"] = out["taxon_raw"].apply(normalize_taxon_label)
         out["lfc"] = pd.to_numeric(out["lfc_raw"], errors="coerce")
+
         if cfg.invert_sign:
             out["lfc"] = -out["lfc"]
 
-        out["q"] = pd.to_numeric(out["q"], errors="coerce")
-        out["significant"] = (out["q"] < cfg.q_cutoff) & out["diff"]
+        out[sig_value_name] = pd.to_numeric(out[sig_value_name], errors="coerce")
+        out["significance_value"] = out[sig_value_name]
+
+        # Keep a q column for backward compatibility with older code.
+        # If significance_metric == "p", this q column contains the selected
+        # significance value used by the package, not an FDR-adjusted q-value.
+        out["q"] = out["significance_value"]
+
+        out["diff"] = out["diff"].astype(str).isin(["True", "true", "1"])
+
+        if self._require_diff_for_significance():
+            out["significant"] = (
+                (out["significance_value"] < cfg.q_cutoff)
+                & out["diff"]
+            )
+        else:
+            out["significant"] = out["significance_value"] < cfg.q_cutoff
+
         out["timepoint"] = timepoint
         out["effect_column"] = effect_col
+        out["significance_metric"] = cfg.significance_metric
 
         return out
 
-    def ancom_matrices(self, subset: Subset) -> Tuple[pd.DataFrame, pd.DataFrame, Optional[str]]:
+    def ancom_matrices(
+        self,
+        subset: Subset,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, Optional[str]]:
         lfc_by_tp = {}
         sig_by_tp = {}
         effect_col = None
@@ -392,11 +488,25 @@ class ANCOMData:
 
         df = pd.DataFrame(rows)
         if df.empty:
-            return pd.DataFrame(columns=["sample", "subject", "group", "timepoint", "tp", "abundance", "taxon_query"])
+            return pd.DataFrame(
+                columns=[
+                    "sample",
+                    "subject",
+                    "group",
+                    "timepoint",
+                    "tp",
+                    "abundance",
+                    "taxon_query",
+                ]
+            )
 
         return df.dropna(subset=["tp", "abundance", "group"])
 
-    def available_taxa(self, timepoint: Optional[str] = None, subset: Optional[Subset] = None) -> Dict[str, List[str]]:
+    def available_taxa(
+        self,
+        timepoint: Optional[str] = None,
+        subset: Optional[Subset] = None,
+    ) -> Dict[str, List[str]]:
         if subset is None:
             subset = Subset(label="all", title="all", filters={})
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
@@ -76,6 +77,7 @@ class ANCOMConfig:
 
     # Export filenames
     lfc_filename: str = "lfc.jsonl"
+    p_filename: str = "p.jsonl"
     q_filename: str = "q.jsonl"
     diff_filename: str = "diff.jsonl"
 
@@ -85,7 +87,20 @@ class ANCOMConfig:
     positive_class: Optional[str] = None
     negative_class: Optional[str] = None
     invert_sign: bool = False
+
+    # Significance handling
+    # Default remains FDR-adjusted q-values.
+    # Set significance_metric="p" for unadjusted p-values.
+    significance_metric: str = "q"  # "q" or "p"
     q_cutoff: float = 0.05
+
+    # If None:
+    # - q-values require diff == True
+    # - p-values use only p < q_cutoff
+    #
+    # Set True to always require diff == True.
+    # Set False to never require diff == True.
+    require_diff_for_significance: Optional[bool] = None
 
     # Default taxa for workflow.trajectories() / workflow.boxplots()
     taxa: List[str] = field(default_factory=list)
@@ -105,8 +120,28 @@ class ANCOMConfig:
         if not self.timepoints:
             raise ValueError("ANCOMConfig.timepoints must contain at least one timepoint.")
 
+        self.significance_metric = str(self.significance_metric).lower().strip()
+        if self.significance_metric not in {"q", "p"}:
+            raise ValueError(
+                "ANCOMConfig.significance_metric must be either 'q' or 'p'. "
+                f"Got: {self.significance_metric}"
+            )
+
+        if self.significance_metric == "p":
+            warnings.warn(
+                "You are using unadjusted p-values for significance filtering "
+                "(significance_metric='p'). These values are not corrected for "
+                "multiple testing and may increase the number of false positives. "
+                "Use this option for exploratory plots only; for final interpretation, "
+                "the default FDR-adjusted q-values are recommended.",
+                UserWarning,
+                stacklevel=2,
+            )
+
         if not self.timepoint_numeric_map:
-            self.timepoint_numeric_map = {tp: i for i, tp in enumerate(self.timepoints)}
+            self.timepoint_numeric_map = {
+                tp: i for i, tp in enumerate(self.timepoints)
+            }
 
         if not self.timepoint_label_map:
             self.timepoint_label_map = {
