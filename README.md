@@ -1,3 +1,4 @@
+STEFAN
 # ANCOM-BC2 Heatmaps and Taxon Trajectories
 
 Reusable plotting utilities for ANCOM-BC2 log fold change heatmaps, taxon trajectory plots and boxplot trajectory plots from QIIME2 feature tables and exported ANCOM-BC2 results.
