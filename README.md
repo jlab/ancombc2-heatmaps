@@ -52,7 +52,7 @@ The package is designed for QIIME2-based microbiome workflows where each timepoi
 Install the package from GitHub:
 
 ```bash
-pip install git+ssh://git@github.com/jlab/ancombc2-heatmaps.git
+pip install git+https://github.com/kbalzer/ancombc2-heatmaps.git
 ```
 
 The package requires QIIME2 because `.qza` feature tables are loaded through the QIIME2 API.
